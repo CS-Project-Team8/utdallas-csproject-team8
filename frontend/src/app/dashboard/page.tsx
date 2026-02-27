@@ -18,20 +18,20 @@ import {
 
 type Studio = {
   id: string;
-  name: string; // e.g., "Marvel Studios"
-  brandAccent: string; // e.g., "#E23333"
-  initials: string; // e.g., "AS"
-  logoTextLeft?: string; // e.g., "MARVEL"
-  logoTextRight?: string; // e.g., "STUDIOS"
+  name: string; 
+  brandAccent: string; 
+  initials: string; 
+  logoTextLeft?: string; 
+  logoTextRight?: string;
 };
 
 type Metrics = {
   totalMovies: number;
-  avgRating: number; // e.g., 7.8
-  creatorRiskScore: number; // e.g., 23
-  profit?: number; // optional (if you want it)
-  extraLabel?: string; // e.g., "Something else here?"
-  extraValue?: number | string; // e.g., 0
+  avgRating: number; 
+  creatorRiskScore: number; 
+  profit?: number; 
+  extraLabel?: string; 
+  extraValue?: number | string;
 };
 
 type Movie = {
@@ -41,7 +41,7 @@ type Movie = {
 };
 
 export default function StudioDashboard() {
-  // ✅ Replace these with backend data (auth -> studio -> metrics -> movies)
+  
   const mockStudio: Studio = {
     id: "studio_1",
     name: "Marvel Studios",
@@ -55,7 +55,7 @@ export default function StudioDashboard() {
     totalMovies: 34,
     avgRating: 7.8,
     creatorRiskScore: 23,
-    profit: 12500000, // example (can remove if you don’t want profit)
+    profit: 12500000, 
     extraLabel: "Something else here?",
     extraValue: 0,
   };
@@ -103,15 +103,15 @@ export default function StudioDashboard() {
     [mockMetrics]
   );
 
-  // Just placeholders for the “most recent 5 movies” blocks
+  
   const movieBlocks = useMemo(() => mockRecentMovies.slice(0, 5), [mockRecentMovies]);
 
   return (
     <div className="h-screen w-screen bg-[#0B0B0B] text-white">
-      {/* outer frame */}
+     
       <div className="h-full">
         <div className="relative h-full w-full overflow-hidden bg-black shadow-[0_30px_120px_rgba(0,0,0,0.65)] ring-1 ring-white/10">
-          {/* subtle background glow */}
+         
           <div
             aria-hidden
             className="pointer-events-none absolute inset-0 opacity-80"
@@ -127,12 +127,12 @@ export default function StudioDashboard() {
 
           {/* content */}
           <div className="relative flex h-full flex-col">
-            {/* HEADER */}
+           
             <header className="flex items-center justify-between gap-4 px-6 py-5">
               {/* left: studio logo area */}
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-3">
-                  {/* faux studio logo */}
+                  
                   <div className="flex items-center gap-2">
                     <div
                       className="rounded-[6px] px-2.5 py-1 text-sm font-extrabold tracking-wide text-white"
@@ -147,7 +147,7 @@ export default function StudioDashboard() {
                 </div>
               </div>
 
-              {/* center: search */}
+            
               <div className="hidden md:flex w-full max-w-2xl items-center gap-3">
                 <button
                   className="rounded-xl border border-white/10 bg-white/5 p-2.5 text-white/70 hover:text-white"
@@ -167,7 +167,7 @@ export default function StudioDashboard() {
                 </div>
               </div>
 
-              {/* right: icons + avatar */}
+             
               <div className="flex items-center gap-3">
                 <button
                   className="rounded-xl border border-white/10 bg-white/5 p-2.5 text-white/70 hover:text-white"
@@ -186,9 +186,8 @@ export default function StudioDashboard() {
               <div className="h-px w-full bg-white/10" />
             </div>
 
-            {/* BODY (scrollable area like screenshot) */}
             <main className="flex-1 overflow-y-auto px-6 py-6">
-              {/* KPI cards row */}
+              
               <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 {kpis.map(({ label, value, Icon }) => (
                   <div
@@ -215,7 +214,7 @@ export default function StudioDashboard() {
               {/* Recent movies blocks area */}
               <section className="mt-6">
                 <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
-                  {/* left big card (like Iron Man spot in screenshot, but you want it as a block for now) */}
+                  
                   <div className="lg:col-span-1">
                     <MoviePlaceholderCard accent={accent} hoverAccent />
                   </div>
@@ -229,7 +228,6 @@ export default function StudioDashboard() {
                     </div>
                   </div>
 
-                  {/* next row (optional block like your screenshot bottom left) */}
                   <div className="lg:col-span-1">
                     <MoviePlaceholderCard accent={accent} hoverAccent />
                   </div>
@@ -262,15 +260,12 @@ function MoviePlaceholderCard({
         style={
             hoverAccent
             ? {
-                // default (not hovered)
                 borderColor: "rgba(255,255,255,0.10)",
-                // on hover (via group-hover using boxShadow is easiest inline)
-                // we’ll do it with CSS variables + Tailwind arbitrary values:
                 }
             : undefined
         }
     >
-      {/* hover border/glow layer */}
+
       {hoverAccent && (
         <div
           className="pointer-events-none absolute inset-0 rounded-[22px] opacity-0 transition-opacity duration-200 group-hover:opacity-100"
@@ -304,7 +299,7 @@ function hexToRgba(hex: string, alpha: number) {
 }
 
 function formatCompact(n: number) {
-  // 12500000 -> 12.5M
+ 
   const abs = Math.abs(n);
   if (abs >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`;
   if (abs >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
