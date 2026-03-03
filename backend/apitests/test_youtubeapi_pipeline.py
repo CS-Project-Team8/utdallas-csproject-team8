@@ -39,7 +39,7 @@ DEVELOPER_KEY3 = os.getenv("YOUTUBE_API_KEY_3")
 GEMINI_API_KEY  = os.getenv("GEMINI_API_KEY")
 TMDB_API_KEY    = os.getenv("TMDB_API_KEY")
 
-youtube_object = build("youtube", "v3", developerKey=DEVELOPER_KEY1)
+youtube_object = build("youtube", "v3", developerKey=DEVELOPER_KEY2)
 client = genai.Client(api_key=GEMINI_API_KEY)
 
 TRAILER_KEYWORDS = ["official trailer", "trailer", "official teaser", "teaser"]
@@ -182,19 +182,46 @@ def get_video_comments(video_id, order="relevance", max_results=100):
         return []
 
 
+TRANSCRIBE_PROMPT = """
+You are a video content analyst that specializes in extracting structured insights from YouTube videos.
+Your job is to analyze the video and return a structured JSON object with insights. Do not return anything else.
+Do not include any explanation or text outside of the JSON object. If a field cannot be determined, use null.
+
+You must return the following JSON structure exactly:
+
+{
+  "overall_sentiment": "<either positive, negative, or mixed>",
+  "key_points": [
+    "<concise string summarizing a main point made by the creator>",
+    ...
+  ],
+  "conclusions": [
+    "<any verdict or conclusion the creator reaches>",
+    ...
+  ],
+  "summary": "<2-3 sentence overview of the video's content and tone>"
+}
+
+Guidelines:
+- Extract 3-5 key points and 1-3 conclusions.
+- Overall sentiment should reflect the creator's tone, not the subject matter.
+- Key points should be actionable insights, not vague descriptions.
+"""
+
 def transcribe(video_url):
     response = client.models.generate_content(
         model="gemini-3-flash-preview",
-        contents=types.Content(
-            parts=[
-                types.Part(
-                    file_data=types.FileData(file_uri=video_url)
-                ),
-                types.Part(text="You are a video content analyst. Given the YouTube video link, extract and summarize the main opinions and points made by the creator. Focus on: overall sentiment, key points, and any conclusions or verdicts mentioned.")
-            ]
-        )
+        contents=[
+            types.Content(parts=[
+                types.Part(text=TRANSCRIBE_PROMPT),  # system instructions
+            ]),
+            types.Content(parts=[
+                types.Part(file_data=types.FileData(file_uri=video_url)),  # actual video
+                types.Part(text="Analyze this video and return the JSON object as specified.")
+            ])
+        ]
     )
-    print(response.text)
+    return response.text
 
 
 # ---------------------------------------------------------------------------
@@ -657,5 +684,9 @@ if __name__ == "__main__":
         {"name": "Paramount Pictures",             "id": "ae377009-5af5-4894-b6e7-f4269f29601c"},
     ]
 
+    # tests the pipeline end-to-end with one studio (Paramount) to verify it runs without errors and correctly handles quota limits
     run_pipeline(studios)
-    # transcribe("https://www.youtube.com/watch?v=tSx8ubSBFN8")
+    
+    # tests the transcription function with a sample YouTube video URL (replace with an actual trailer URL for real testing)
+    result = transcribe("https://www.youtube.com/watch?v=PVEi8KnD56o")
+    print(result)
