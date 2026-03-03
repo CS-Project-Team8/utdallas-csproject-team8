@@ -138,7 +138,7 @@ CREATE INDEX IF NOT EXISTS idx_movie_metric_snapshots_movie_time
   ON movieMetricSnapshots (movieId, capturedAt DESC);
 
 
-CREATE TABLE IF NOT EXISTS ytCommentThreads ( -- requires YouTube data (search for the top 5 most viewed movie reviews for each movie & extract top 10 comments info)
+CREATE TABLE IF NOT EXISTS ytCommentThreads ( -- requires YouTube data (search for the top 5 most viewed movie reviews for each movie & extract comments info) & MAY NOT NEED THIS TABLE?
   threadId          TEXT PRIMARY KEY, 
   videoId           TEXT NOT NULL REFERENCES ytVideos(videoId) ON DELETE CASCADE,
   totalReplyCount  INT NOT NULL DEFAULT 0,
@@ -149,7 +149,7 @@ CREATE INDEX IF NOT EXISTS idx_yt_comment_threads_video_id
   ON ytCommentThreads (videoId);
 
 
-CREATE TABLE IF NOT EXISTS ytComments ( -- requires YouTube data (search for the top 5 most viewed movie reviews for each movie & extract top 10 comments info)
+CREATE TABLE IF NOT EXISTS ytComments ( -- requires YouTube data (search for the top 5 most viewed movie reviews for each movie & extract comments info)
   commentId         TEXT PRIMARY KEY, 
   videoId           TEXT NOT NULL REFERENCES ytVideos(videoId) ON DELETE CASCADE,
   threadId          TEXT REFERENCES ytCommentThreads(threadId) ON DELETE SET NULL,
