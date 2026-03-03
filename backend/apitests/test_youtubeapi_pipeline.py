@@ -54,10 +54,7 @@ REVIEW_QUERY_TEMPLATES = [
 MIN_REVIEW_DURATION_SECONDS = 180  # filter out Shorts (< 3 minutes)
 
 
-# ---------------------------------------------------------------------------
-# Quota tracking
-# ---------------------------------------------------------------------------
-
+# tracking quote so that we don't accidentally go over YouTubeAPI's daily quota limit (just during testing)
 def use_quota(units, reason=""):
     global quota_used
     quota_used += units
@@ -65,11 +62,7 @@ def use_quota(units, reason=""):
     if quota_used >= QUOTA_LIMIT:
         raise RuntimeError(f"Daily YouTube quota limit reached ({quota_used} units). Stopping.")
 
-
-# ---------------------------------------------------------------------------
-# Utility helpers
-# ---------------------------------------------------------------------------
-
+# helper function to convert ISO 8601 duration format (e.g. PT2M30S) to total seconds -> easier filtering by vid length
 def iso8601_duration_to_seconds(d):
     """Parse ISO 8601 duration like PT2M30S to seconds."""
     if not d or not d.startswith("PT"):
@@ -83,7 +76,7 @@ def iso8601_duration_to_seconds(d):
     if ms: s = int(ms.group(1))
     return h * 3600 + m * 60 + s
 
-
+# helper function to normalize video titles and extract movie name for common trailer title formats (i.e., "Movie Title | Official Trailer")
 def normalize_title(video_title):
     """Extract movie name only from 'Movie Title | Official Trailer' format."""
     t = video_title.strip()
@@ -102,7 +95,7 @@ def normalize_title(video_title):
 
     return candidate if len(candidate) > 2 else None
 
-
+# helper function to check TMDB for movie release date -> easier filter for latest 5 movies
 def get_movie_release_date(movie_title):
     """Check TMDB for the movie's release date. Returns 'YYYY-MM-DD' or None."""
     response = requests.get(
@@ -120,7 +113,7 @@ def get_movie_release_date(movie_title):
     release_date = results[0].get("release_date")
     return release_date if release_date else None
 
-
+# helper function to get video statistics (views, likes, comments) -> for ytVideoMetricSnapshots table and movieMetricSnapshots table
 def get_video_statistics(video_id):
     try:
         result = youtube_object.videos().list(
@@ -150,7 +143,7 @@ def get_video_statistics(video_id):
         print(f"Could not retrieve statistics for {video_id}: {e}")
         return None
 
-
+# helper function to get top comments for a video -> for ytCommentThreads and ytComments tables
 def get_video_comments(video_id, order="relevance", max_results=100):
     try:
         result = youtube_object.commentThreads().list(
@@ -181,7 +174,7 @@ def get_video_comments(video_id, order="relevance", max_results=100):
         print(f"Could not retrieve comments for {video_id}: {e}")
         return []
 
-
+# prompt for Gemini 3 Flash -> please check over during PR for accuracy/clarity & if output is in right format
 TRANSCRIBE_PROMPT = """
 You are a video content analyst that specializes in extracting structured insights from YouTube videos.
 Your job is to analyze the video and return a structured JSON object with insights. Do not return anything else.
@@ -208,6 +201,7 @@ Guidelines:
 - Key points should be actionable insights, not vague descriptions.
 """
 
+# helper function to get video transcript and extract insights using Gemini 3 Flash -> need to figure out which table this info goes into
 def transcribe(video_url):
     response = client.models.generate_content(
         model="gemini-3-flash-preview",
@@ -224,10 +218,7 @@ def transcribe(video_url):
     return response.text
 
 
-# ---------------------------------------------------------------------------
-# Phase 0: find & insert official studio YouTube channel
-# ---------------------------------------------------------------------------
-
+# Phase 0: find official YouTube channel for each studio and insert into DB 
 def phase0_insert_studio_channels(studio_id, studio_name):
     print(f"\n{'='*60}")
     print(f"PHASE 0: Finding official channel for {studio_name}")
@@ -275,11 +266,7 @@ def phase0_insert_studio_channels(studio_id, studio_name):
 
     return channel_id
 
-
-# ---------------------------------------------------------------------------
-# Trailer discovery: uploads playlist approach (low quota cost)
-# ---------------------------------------------------------------------------
-
+# helper function (for Phase 0) to get uploads playlist ID of studio channel uploads -> more quota-efficient
 def get_uploads_playlist_id(channel_id):
     """Get the uploads playlist ID for a channel (1 quota unit)."""
     result = youtube_object.channels().list(
@@ -292,7 +279,7 @@ def get_uploads_playlist_id(channel_id):
         raise RuntimeError(f"Channel not found: {channel_id}")
     return items[0]["contentDetails"]["relatedPlaylists"]["uploads"]
 
-
+# helper function (for Phase 0) to get latest trailers from channel uploads playlist (Phase 0)
 def get_latest_trailers_from_channel(channel_id, limit=5, max_scan=200):
     """
     Get the latest N released trailers from a studio's official YouTube channel uploads.
@@ -382,10 +369,7 @@ def get_latest_trailers_from_channel(channel_id, limit=5, max_scan=200):
     return trailers
 
 
-# ---------------------------------------------------------------------------
-# Phase 1: insert movies + trailers into DB
-# ---------------------------------------------------------------------------
-
+# Phase 1: insert movies + trailers into DB, along with trailer comments
 def phase1_insert_movies(studio_id, studio_name, trailers):
     print(f"\n{'='*60}")
     print(f"PHASE 1: Inserting movies for {studio_name}")
@@ -399,8 +383,7 @@ def phase1_insert_movies(studio_id, studio_name, trailers):
 
         print(f"\n  Inserting: {movie_name} ({published_at})")
 
-        # insert trailers into movie table, ytChannel table, ytVideo table,
-        # movieYtVideos table, ytVideoMetricSnapshots table, and movieMetricSnapshots table
+        # insert trailers into movie table, ytChannel table, ytVideo table, movieYtVideos table, ytVideoMetricSnapshots table, and movieMetricSnapshots table
         try:
             with conn.cursor() as cur:
                 movie_id = insert_movie(cur, studio_id, movie_name, published_at)
@@ -434,6 +417,7 @@ def phase1_insert_movies(studio_id, studio_name, trailers):
             if c["comment_id"] not in seen_ids:
                 trailer_comments.append(c)
 
+        # insert trailer comments into ytCommentThreads and ytComments tables
         if trailer_comments:
             try:
                 with conn.cursor() as cur:
@@ -460,11 +444,7 @@ def phase1_insert_movies(studio_id, studio_name, trailers):
 
     return movie_ids
 
-
-# ---------------------------------------------------------------------------
-# Phase 2: find reviews for each movie and insert into DB
-# ---------------------------------------------------------------------------
-
+# Phase 2: for each movie, find and insert 5 top review videos + comments
 def phase2_insert_reviews(movie_id, movie_name, studio_channel_id):
     print(f"\n{'='*60}")
     print(f"PHASE 2: Finding reviews for {movie_name}")
@@ -543,14 +523,13 @@ def phase2_insert_reviews(movie_id, movie_name, studio_channel_id):
 
     print(f"  Selected {len(selected)} reviews from unique channels")
 
-    # Step 4: insert review videos into ytChannel table, ytVideo table,
-    # ytVideoMetricSnapshots table, movieYtVideos table,
-    # ytCommentThreads table, and ytComments table
+    # Step 4: insert review videos + comments into db
     total_views = total_likes = total_comments = 0
 
     for r in selected:
         print(f"\n  Review: {r['title']} ({r['views']:,} views)")
 
+        # insert review video into ytChannel table, ytVideo table, ytVideoMetricSnapshots table 
         try:
             with conn.cursor() as cur:
                 insert_yt_channel(cur, r["channel_id"], r["channel_title"], None)
@@ -580,15 +559,15 @@ def phase2_insert_reviews(movie_id, movie_name, studio_channel_id):
             print(f"  Error inserting review {r['video_id']}: {e}")
             continue
 
-        # Fetch and insert comments
-        # Get top comments by relevance + most recent, deduplicate
+        # Fetch and insert top comments -> by relevance + most recent, deduplicate
         comments = get_video_comments(r["video_id"], order="relevance", max_results=100)
         recent = get_video_comments(r["video_id"], order="time", max_results=50)
         seen_ids = {c["comment_id"] for c in comments}
         for c in recent:
             if c["comment_id"] not in seen_ids:
                 comments.append(c)
-                
+              
+        # insert review comments into ytCommentThreads and ytComments tables  
         if comments:
             try:
                 with conn.cursor() as cur:
@@ -626,10 +605,7 @@ def phase2_insert_reviews(movie_id, movie_name, studio_channel_id):
         print(f"  Error saving movie metric snapshot: {e}")
 
 
-# ---------------------------------------------------------------------------
-# Main pipeline
-# ---------------------------------------------------------------------------
-
+# main pipeline function to run all phases end-to-end for a list of studios -> latest 5 trailers + top 5 reviews & comments for each trailer
 def run_pipeline(studios):
     global quota_used
     for studio in studios:
@@ -674,14 +650,14 @@ def run_pipeline(studios):
     print(f"Pipeline complete. Total YouTube quota used: {quota_used} units")
     print(f"{'='*60}")
 
-
+# main function to run the pipeline and test the transcription function with a sample YouTube video URL
 if __name__ == "__main__":
     studios = [
         # {"name": "Walt Disney Animation Studios", "id": "08bd686f-964d-4621-b7bf-190a154c7947"},
         # {"name": "Sony Pictures Entertainment",   "id": "8da2d831-7051-4831-8afc-3b6e2fa47ee8"},
         # {"name": "Warner Bros.",                   "id": "05864c87-4a02-4dee-ace9-7b1ca8b5b86d"},
         # {"name": "Universal Pictures",             "id": "156ac1c3-71f0-40e2-9a5f-0f1c7a4d96db"},
-        {"name": "Paramount Pictures",             "id": "ae377009-5af5-4894-b6e7-f4269f29601c"},
+        {"name": "Paramount Pictures",             "id": "ae377009-5af5-4894-b6e7-f4269f29601c"}, # only tested with Paramount to save on quota
     ]
 
     # tests the pipeline end-to-end with one studio (Paramount) to verify it runs without errors and correctly handles quota limits
