@@ -2,7 +2,7 @@
 import re
 import time
 from googleapiclient.discovery import build
-import json
+# import json
 
 # imports for Gemini 3 Flash
 from google import genai
@@ -10,7 +10,7 @@ from google.genai import types
 
 # imports for TMDB API
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime
 
 # imports for environment variables
 from dotenv import load_dotenv
@@ -71,9 +71,12 @@ def iso8601_duration_to_seconds(d):
     mh = re.search(r"(\d+)H", d)
     mm = re.search(r"(\d+)M", d)
     ms = re.search(r"(\d+)S", d)
-    if mh: h = int(mh.group(1))
-    if mm: m = int(mm.group(1))
-    if ms: s = int(ms.group(1))
+    if mh: 
+        h = int(mh.group(1))
+    if mm: 
+        m = int(mm.group(1))
+    if ms: 
+        s = int(ms.group(1))
     return h * 3600 + m * 60 + s
 
 # helper function to normalize video titles and extract movie name for common trailer title formats (i.e., "Movie Title | Official Trailer")
@@ -624,7 +627,7 @@ def run_pipeline(studios):
                 continue
 
             # Get latest 5 released trailers from channel uploads (quota-efficient)
-            print(f"\n  Fetching latest trailers from channel uploads...")
+            print("\n  Fetching latest trailers from channel uploads...")
             trailers = get_latest_trailers_from_channel(official_channel_id, limit=5)
             if not trailers:
                 print(f"Skipping {studio_name} — no released trailers found on channel")
