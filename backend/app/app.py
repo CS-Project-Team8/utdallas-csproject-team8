@@ -99,6 +99,21 @@ You must return the following JSON structure exactly:
     "neutral_pct": <integer from 0-100>,
     "summary": "<1-2 sentences describing the overall tone of the reviewer>"
   },
+  "top_words": [
+    {
+      "word": "<single word drawn from transcripts>",
+      "sentiment": "<either positive, negative, or mixed>",
+      "count": <integer of how often the word appears>
+    },
+    ...
+  ],
+  "mood_signals": [
+    {
+      "mood": "<single mood like Excitement, Nostalgia, Disappointment, etc>",
+      "percentage": <integer from 0-100, estimate how strongly this mood is present across reviews>
+    },
+    ...
+  ],
   "creator_risk": {
     "risk_score": <integer from 1-10>,
     "risk_level": "<one of: low, moderate, high>",
@@ -108,9 +123,11 @@ You must return the following JSON structure exactly:
 
 Guidelines:
 - Claims are a factual statement made in the trailer. Narratives are high-level stories or themes connected by multiple claims.
-- Focus claims on what the reviewer and commenters are actually saying about the film.
+- Focus claims on what the reviewer is actually saying about the film. Focus on their thoughts, feelings, and voice.
 - Extract 3-5 key takeaways, 4-6 claims, and 1-3 narratives.
+- Extract exactly 5 moods for mood_signals, each scored individually.
 - Key takeaways should be points a studio executive may need to know about public reaction to the movie.
+- There should be a total of 10 expressive words in top_words, taken directly from the most common sentiment words in the transcript
 """
 
 AGGREGATION_PROMPT = """
@@ -138,12 +155,27 @@ You must return the following JSON structure exactly:
     ...
   ],
   "sentiment_breakdown": {
-    "trailer_sentiment": "<either positive, negative, or mixed>",
-    "review_sentiment": "<either positive, negative, or mixed>",
     "overall_sentiment": "<either positive, negative, or mixed>",
     "avg_sentiment_score": <number between -1.0 and 1.0>,
+    "positive_pct": <integer from 0-100>,
+    "negative_pct": <integer from 0-100>,
+    "neutral_pct": <integer from 0-100>,
     "summary": "<1-2 sentences summarizing overall movie sentiment across all sources>"
   },
+  "top_words": [
+    {
+      "word": "<single word drawn from comments and transcripts>",
+      "sentiment": "<either positive, negative, or mixed>"
+    },
+    ...
+  ],
+  "mood_signals": [
+    {
+      "mood": "<single mood like Excitement, Nostalgia, Disappointment, etc>",
+      "percentage": <integer from 0-100, estimate how strongly this mood is present across reviews and comments>
+    },
+    ...
+  ],
   "creator_risk": {
     "risk_score": <integer from 1-10>,
     "risk_level": "<either low, moderate, or high>",
@@ -156,6 +188,8 @@ Guidelines:
 - creater_risk and narratives should reflect movie as a whole, not just specific videos.
 - Extract 3-5 key takeaways and 2-4 narratives.
 - Key takeaways and creator_risk should be points a studio executive may need to know about overall reception of the movie.
+- There should be a total of 10 words in top_words, based on the most common words that appear across videos and comments
+- In sentiment_breakdown, positive_pct, negative_pct, and neutral_pct should all sum to 100
 """
 
 # clean up input given by user to make it easier for llm to understand
