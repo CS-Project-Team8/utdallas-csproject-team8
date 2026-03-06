@@ -1,4 +1,5 @@
 # Project Setup Guide (Backend + Frontend + DB)
+# Anush PR - Worked on the entire database schema
 
 This repo contains:
 - `backend/` = **FastAPI** (Python)
