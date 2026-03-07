@@ -5,3 +5,8 @@ httpx==0.27.2
 sqlalchemy==2.0.35
 psycopg[binary]==3.2.3
 httpx==0.27.2
+google-api-python-client
+google-genai
+requests
+python-dotenv
+psycopg2-binary
