@@ -1,8 +1,9 @@
 # general imports
 import re
 import time
+import json
 from googleapiclient.discovery import build
-# import json
+from datetime import datetime, timezone
 
 # imports for Gemini 3 Flash
 from google import genai
@@ -10,7 +11,6 @@ from google.genai import types
 
 # imports for TMDB API
 import requests
-from datetime import datetime
 
 # imports for environment variables
 from dotenv import load_dotenv
@@ -27,7 +27,8 @@ from db_operationstest import (
     insert_yt_comment,
     insert_movie,
     insert_movie_yt_video,
-    insert_movie_metric_snapshot
+    insert_movie_metric_snapshot,
+    insert_transcript
 )
 
 # keys and client setup
@@ -71,13 +72,19 @@ def iso8601_duration_to_seconds(d):
     mh = re.search(r"(\d+)H", d)
     mm = re.search(r"(\d+)M", d)
     ms = re.search(r"(\d+)S", d)
-    if mh: 
+    if mh:
         h = int(mh.group(1))
-    if mm: 
+    if mm:
         m = int(mm.group(1))
-    if ms: 
+    if ms:
         s = int(ms.group(1))
     return h * 3600 + m * 60 + s
+
+# helper function to calculate engagement rate = (total likes + total comments) / total views -> for movieMetricSnapshots table
+def calculate_engagement_rate(views, likes, comments):
+    likes = likes or 0
+    comments = comments or 0
+    return (likes + comments) / views if views and views > 0 else 0.0
 
 # helper function to normalize video titles and extract movie name for common trailer title formats (i.e., "Movie Title | Official Trailer")
 def normalize_title(video_title):
@@ -204,7 +211,7 @@ Guidelines:
 - Key points should be actionable insights, not vague descriptions.
 """
 
-# helper function to get video transcript and extract insights using Gemini 3 Flash -> need to figure out which table this info goes into
+# helper function to get video transcript and extract insights using Gemini 3 Flash 
 def transcribe(video_url):
     response = client.models.generate_content(
         model="gemini-3-flash-preview",
@@ -218,7 +225,30 @@ def transcribe(video_url):
             ])
         ]
     )
-    return response.text
+    raw = response.text.strip()
+    # strip markdown code fences if Gemini wraps the response
+    if raw.startswith("```"):
+        raw = re.sub(r"^```[a-z]*\n?", "", raw)
+        raw = re.sub(r"\n?```$", "", raw)
+    return json.loads(raw)
+
+# helper function to transcribe a video and insert the result into ytvideotranscripts table
+def transcribe_and_insert(cursor, videoid, video_url):
+    try:
+        insights = transcribe(video_url)
+        # store the full JSON insights as the fulltext
+        fulltext = json.dumps(insights)
+        transcript_id = insert_transcript(
+            cursor,
+            videoid=videoid,
+            language="en",
+            source="auto",
+            fulltext=fulltext,
+        )
+        return transcript_id
+    except Exception as e:
+        print(f"  Error transcribing {video_url}: {e}")
+        return None
 
 
 # Phase 0: find official YouTube channel for each studio and insert into DB 
@@ -282,7 +312,7 @@ def get_uploads_playlist_id(channel_id):
         raise RuntimeError(f"Channel not found: {channel_id}")
     return items[0]["contentDetails"]["relatedPlaylists"]["uploads"]
 
-# helper function (for Phase 0) to get latest trailers from channel uploads playlist (Phase 0)
+# helper function (for Phase 0) to get latest trailers from channel uploads playlist
 def get_latest_trailers_from_channel(channel_id, limit=5, max_scan=200):
     """
     Get the latest N released trailers from a studio's official YouTube channel uploads.
@@ -386,6 +416,10 @@ def phase1_insert_movies(studio_id, studio_name, trailers):
 
         print(f"\n  Inserting: {movie_name} ({published_at})")
 
+        # Capture a single timestamp to use for both metric snapshot inserts in this batch
+        captured_at = datetime.now(timezone.utc)
+        engagement_rate = calculate_engagement_rate(trailer["views"], trailer["likes"], trailer["comment_count"])
+        
         # insert trailers into movie table, ytChannel table, ytVideo table, movieYtVideos table, ytVideoMetricSnapshots table, and movieMetricSnapshots table
         try:
             with conn.cursor() as cur:
@@ -393,15 +427,30 @@ def phase1_insert_movies(studio_id, studio_name, trailers):
                 insert_yt_channel(cur, trailer["channel_id"], trailer["channel_title"], None)
                 insert_yt_video(
                     cur,
-                    video_id=trailer["video_id"],
-                    channel_id=trailer["channel_id"],
+                    videoid=trailer["video_id"],
+                    channelid=trailer["channel_id"],
                     title=trailer["title"],
                     description=trailer["description"],
-                    published_at=trailer["published_at_full"],
+                    publishedat=trailer["published_at_full"],
                 )
                 insert_movie_yt_video(cur, movie_id, trailer["video_id"], 'official_trailer', is_primary=True)
-                insert_yt_video_metric_snapshot(cur, trailer["video_id"], trailer["views"], trailer["likes"], trailer["comment_count"])
-                insert_movie_metric_snapshot(cur, movie_id, trailer["views"], trailer["likes"], trailer["comment_count"])
+                insert_yt_video_metric_snapshot(
+                    cur,
+                    videoid=trailer["video_id"],
+                    capturedat=captured_at,
+                    viewcount=trailer["views"],
+                    likecount=trailer["likes"],
+                    commentcount=trailer["comment_count"],
+                )
+                insert_movie_metric_snapshot(
+                    cur,
+                    movieid=movie_id,
+                    capturedat=captured_at,
+                    viewstotal=trailer["views"],
+                    likestotal=trailer["likes"],
+                    commentstotal=trailer["comment_count"],
+                    engagementrate=engagement_rate,
+                )
 
             conn.commit()
             print(f"  Inserted movie: {movie_name} (movieId: {movie_id})")
@@ -410,7 +459,7 @@ def phase1_insert_movies(studio_id, studio_name, trailers):
         except Exception as e:
             conn.rollback()
             print(f"  Error inserting movie {movie_name}: {e}")
-            continue  # add continue so comment fetching is skipped on error too
+            continue
 
         # Fetch trailer comments (relevance + recent, deduplicated)
         trailer_comments = get_video_comments(trailer["video_id"], order="relevance", max_results=100)
@@ -430,14 +479,16 @@ def phase1_insert_movies(studio_id, studio_name, trailers):
                         )
                         insert_yt_comment(
                             cur,
-                            comment_id=comment["comment_id"],
-                            video_id=trailer["video_id"],
-                            thread_id=comment["thread_id"],
+                            commentid=comment["comment_id"],
+                            videoid=trailer["video_id"],
+                            threadid=comment["thread_id"],
+                            parentcommentid=None,
                             text=comment["text"],
-                            like_count=comment["likes"],
-                            author_channel_id=comment["author_channel_id"],
-                            published_at=comment["published_at"],
-                            updated_at=comment["updated_at"],
+                            likecount=comment["likes"],
+                            authorchannelid=comment["author_channel_id"],
+                            publishedat=comment["published_at"],
+                            updatedat=comment["updated_at"],
+                            ingestedat=datetime.now(timezone.utc),
                         )
                 conn.commit()
                 print(f"  Saved {len(trailer_comments)} trailer comments for {movie_name}")
@@ -528,6 +579,7 @@ def phase2_insert_reviews(movie_id, movie_name, studio_channel_id):
 
     # Step 4: insert review videos + comments into db
     total_views = total_likes = total_comments = 0
+    captured_at = datetime.now(timezone.utc)
 
     for r in selected:
         print(f"\n  Review: {r['title']} ({r['views']:,} views)")
@@ -538,20 +590,39 @@ def phase2_insert_reviews(movie_id, movie_name, studio_channel_id):
                 insert_yt_channel(cur, r["channel_id"], r["channel_title"], None)
                 insert_yt_video(
                     cur,
-                    video_id=r["video_id"],
-                    channel_id=r["channel_id"],
+                    videoid=r["video_id"],
+                    channelid=r["channel_id"],
                     title=r["title"],
                     description=r["description"],
-                    published_at=r["published_at"],
-                    category_id=r["category_id"],
-                    default_language=r["default_language"],
+                    publishedat=r["published_at"],
+                    durationseconds=r["duration_seconds"],
+                    categoryid=r["category_id"],
+                    defaultlanguage=r["default_language"],
                     tags=r["tags"],
                     caption=r["caption"],
                 )
                 insert_yt_video_metric_snapshot(
-                    cur, r["video_id"], r["views"], r["likes"], r["comment_count"]
+                    cur,
+                    videoid=r["video_id"],
+                    capturedat=captured_at,
+                    viewcount=r["views"],
+                    likecount=r["likes"],
+                    commentcount=r["comment_count"],
                 )
+                
             conn.commit()
+            
+            # # insert review video transcript using Gemini 3 Flash and save to ytvideotranscripts table
+            # video_url = f"https://www.youtube.com/watch?v={r['video_id']}"
+            # try:
+            #     with conn.cursor() as cur:
+            #         transcript_id = transcribe_and_insert(cur, r["video_id"], video_url)
+            #     conn.commit()
+            #     if transcript_id:
+            #         print(f"  Saved transcript for {r['title']}")
+            # except Exception as e:
+            #     conn.rollback()
+            #     print(f"  Error saving transcript: {e}")
 
             total_views += r["views"]
             total_likes += (r["likes"] or 0)
@@ -569,8 +640,8 @@ def phase2_insert_reviews(movie_id, movie_name, studio_channel_id):
         for c in recent:
             if c["comment_id"] not in seen_ids:
                 comments.append(c)
-              
-        # insert review comments into ytCommentThreads and ytComments tables  
+
+        # insert review comments into ytCommentThreads and ytComments tables
         if comments:
             try:
                 with conn.cursor() as cur:
@@ -580,14 +651,16 @@ def phase2_insert_reviews(movie_id, movie_name, studio_channel_id):
                         )
                         insert_yt_comment(
                             cur,
-                            comment_id=comment["comment_id"],
-                            video_id=r["video_id"],
-                            thread_id=comment["thread_id"],
+                            commentid=comment["comment_id"],
+                            videoid=r["video_id"],
+                            threadid=comment["thread_id"],
+                            parentcommentid=None,
                             text=comment["text"],
-                            like_count=comment["likes"],
-                            author_channel_id=comment["author_channel_id"],
-                            published_at=comment["published_at"],
-                            updated_at=comment["updated_at"],
+                            likecount=comment["likes"],
+                            authorchannelid=comment["author_channel_id"],
+                            publishedat=comment["published_at"],
+                            updatedat=comment["updated_at"],
+                            ingestedat=datetime.now(timezone.utc),
                         )
                 conn.commit()
                 print(f"  Saved {len(comments)} comments")
@@ -600,7 +673,15 @@ def phase2_insert_reviews(movie_id, movie_name, studio_channel_id):
     # Save aggregate movie metric snapshot for reviews
     try:
         with conn.cursor() as cur:
-            insert_movie_metric_snapshot(cur, movie_id, total_views, total_likes, total_comments)
+            insert_movie_metric_snapshot(
+                cur,
+                movieid=movie_id,
+                capturedat=captured_at,
+                viewstotal=total_views,
+                likestotal=total_likes,
+                commentstotal=total_comments,
+                engagementrate=None,
+            )
         conn.commit()
         print(f"\n  Saved movie metric snapshot for {movie_name}")
     except Exception as e:
@@ -659,13 +740,13 @@ if __name__ == "__main__":
         # {"name": "Walt Disney Animation Studios", "id": "08bd686f-964d-4621-b7bf-190a154c7947"},
         # {"name": "Sony Pictures Entertainment",   "id": "8da2d831-7051-4831-8afc-3b6e2fa47ee8"},
         # {"name": "Warner Bros.",                   "id": "05864c87-4a02-4dee-ace9-7b1ca8b5b86d"},
-        # {"name": "Universal Pictures",             "id": "156ac1c3-71f0-40e2-9a5f-0f1c7a4d96db"},
-        {"name": "Paramount Pictures",             "id": "ae377009-5af5-4894-b6e7-f4269f29601c"}, # only tested with Paramount to save on quota
+        # {"name": "Universal Pictures",             "id": "be498448-222e-44e8-9b81-8f4680b455d2"},
+        {"name": "Paramount Pictures",             "id": "f5cfdff5-13a5-47a3-a7e9-51416f44ee33"},  # only tested with Paramount to save on quota
     ]
 
     # tests the pipeline end-to-end with one studio (Paramount) to verify it runs without errors and correctly handles quota limits
     run_pipeline(studios)
-    
+
     # tests the transcription function with a sample YouTube video URL (replace with an actual trailer URL for real testing)
-    result = transcribe("https://www.youtube.com/watch?v=PVEi8KnD56o")
-    print(result)
+    # result = transcribe("https://www.youtube.com/watch?v=PVEi8KnD56o")
+    # print(result)

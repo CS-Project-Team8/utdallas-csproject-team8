@@ -2,24 +2,27 @@ import psycopg2
 import psycopg2.extras
 
 conn = psycopg2.connect(
+    database="yip",
+    user="postgres",
+    password="postgres",
     host="localhost",
-    database="youtubetestdb",
-    user="zora",
-    password=""
+    port=5434
 )
 
-def insert_yt_channel(cursor, channel_id, channel_title, country):
+
+def insert_yt_channel(cursor, channelid, channeltitle, country):
     cursor.execute("""
         INSERT INTO ytChannels (channelId, channelTitle, country)
         VALUES (%s, %s, %s)
         ON CONFLICT (channelId) DO UPDATE SET
             channelTitle = EXCLUDED.channelTitle,
             updatedAt = now()
-    """, (channel_id, channel_title, country))
+    """, (channelid, channeltitle, country))
 
-def insert_yt_video(cursor, video_id, channel_id, title, description, published_at,
-                     duration_seconds=None, category_id=None, default_language=None,
-                     tags=None, caption=None):
+
+def insert_yt_video(cursor, videoid, channelid, title, description, publishedat,
+                    durationseconds=None, categoryid=None, defaultlanguage=None,
+                    tags=None, caption=None):
     cursor.execute("""
         INSERT INTO ytVideos (videoId, channelId, title, description, publishedAt,
                               durationSeconds, categoryId, defaultLanguage, tags, caption)
@@ -28,55 +31,68 @@ def insert_yt_video(cursor, video_id, channel_id, title, description, published_
             title = EXCLUDED.title,
             description = EXCLUDED.description,
             updatedAt = now()
-    """, (video_id, channel_id, title, description, published_at,
-          duration_seconds, category_id, default_language,
+    """, (videoid, channelid, title, description, publishedat,
+          durationseconds, categoryid, defaultlanguage,
           psycopg2.extras.Json(tags) if tags else None, caption))
 
-def insert_yt_video_metric_snapshot(cursor, video_id, view_count, like_count, comment_count):
+
+def insert_yt_video_metric_snapshot(cursor, videoid, capturedat, viewcount, likecount, commentcount):
     cursor.execute("""
         INSERT INTO ytVideoMetricSnapshots (videoId, capturedAt, viewCount, likeCount, commentCount)
-        VALUES (%s, now(), %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s)
         ON CONFLICT (videoId, capturedAt) DO NOTHING
-    """, (video_id, view_count, like_count, comment_count))
+    """, (videoid, capturedat, viewcount, likecount, commentcount))
 
-def insert_yt_comment_thread(cursor, thread_id, video_id, total_reply_count=0):
+
+def insert_yt_comment_thread(cursor, threadid, videoid, totalreplycount):
     cursor.execute("""
         INSERT INTO ytCommentThreads (threadId, videoId, totalReplyCount, lastFetchedAt)
         VALUES (%s, %s, %s, now())
         ON CONFLICT (threadId) DO UPDATE SET
             totalReplyCount = EXCLUDED.totalReplyCount,
             lastFetchedAt = now()
-    """, (thread_id, video_id, total_reply_count))
+    """, (threadid, videoid, totalreplycount))
 
-def insert_yt_comment(cursor, comment_id, video_id, thread_id, text, like_count,
-                       author_channel_id, published_at, updated_at, parent_comment_id=None):
+
+def insert_yt_comment(cursor, commentid, videoid, threadid, parentcommentid, text, likecount,
+                      authorchannelid, publishedat, updatedat, ingestedat):
     cursor.execute("""
         INSERT INTO ytComments (commentId, videoId, threadId, parentCommentId, text,
-                                likeCount, authorChannelId, publishedAt, updatedAt)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                likeCount, authorChannelId, publishedAt, updatedAt, ingestedAt)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (commentId) DO NOTHING
-    """, (comment_id, video_id, thread_id, parent_comment_id, text,
-          like_count, author_channel_id, published_at, updated_at))
+    """, (commentid, videoid, threadid, parentcommentid, text,
+          likecount, authorchannelid, publishedat, updatedat, ingestedat))
 
-def insert_movie(cursor, studio_id, title, release_date=None):
+
+def insert_movie(cursor, studioid, title, releasedate=None):
     cursor.execute("""
         INSERT INTO movies (studioId, title, releaseDate, status)
         VALUES (%s, %s, %s, 'active')
         ON CONFLICT (studioId, title) DO UPDATE SET updatedAt = now()
         RETURNING movieId
-    """, (studio_id, title, release_date))
+    """, (studioid, title, releasedate))
     return cursor.fetchone()[0]
 
-def insert_movie_yt_video(cursor, movie_id, video_id, video_role='official_trailer', is_primary=False):
+
+def insert_movie_yt_video(cursor, movieid, videoid, videorole, is_primary=False):
     cursor.execute("""
         INSERT INTO movieYtVideos (movieId, videoId, videoRole, isPrimary)
         VALUES (%s, %s, %s, %s)
         ON CONFLICT (movieId, videoId) DO NOTHING
-    """, (movie_id, video_id, video_role, is_primary))
+    """, (movieid, videoid, videorole, is_primary))
 
-def insert_movie_metric_snapshot(cursor, movie_id, views_total, likes_total, comments_total):
+
+def insert_movie_metric_snapshot(cursor, movieid, capturedat, viewstotal, likestotal, commentstotal, engagementrate):
     cursor.execute("""
-        INSERT INTO movieMetricSnapshots (movieId, capturedAt, viewsTotal, likesTotal, commentsTotal)
-        VALUES (%s, now(), %s, %s, %s)
+        INSERT INTO movieMetricSnapshots (movieId, capturedAt, viewsTotal, likesTotal, commentsTotal, engagementRate)
+        VALUES (%s, %s, %s, %s, %s, %s)
         ON CONFLICT (movieId, capturedAt) DO NOTHING
-    """, (movie_id, views_total, likes_total, comments_total))
+    """, (movieid, capturedat, viewstotal, likestotal, commentstotal, engagementrate))
+    
+def insert_transcript(cursor, videoid, language, source, fulltext):
+    cursor.execute("""
+        INSERT INTO ytvideotranscripts (videoid, language, source, fulltext)
+        VALUES (%s, %s, %s, %s)
+        ON CONFLICT (videoid, language, fetchedat) DO NOTHING
+    """, (videoid, language, source, fulltext))    
