@@ -18,7 +18,7 @@ import os
 from pathlib import Path
 
 # imports for DB operations
-from testdb_operations import (
+from db_operationstest import (
     conn,
     insert_yt_channel,
     insert_yt_video,
