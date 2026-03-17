@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import {
   Search,
   Bell,
@@ -18,19 +18,19 @@ import {
 
 type Studio = {
   id: string;
-  name: string; 
-  brandAccent: string; 
-  initials: string; 
-  logoTextLeft?: string; 
+  name: string;
+  brandAccent: string;
+  initials: string;
+  logoTextLeft?: string;
   logoTextRight?: string;
 };
 
 type Metrics = {
   totalMovies: number;
-  avgRating: number; 
-  creatorRiskScore: number; 
-  profit?: number; 
-  extraLabel?: string; 
+  avgRating: number;
+  creatorRiskScore: number;
+  profit?: number;
+  extraLabel?: string;
   extraValue?: number | string;
 };
 
@@ -38,6 +38,16 @@ type Movie = {
   id: string;
   title: string;
   year?: number;
+  posterUrl?: string;
+  summary?: string;
+  sentimentLabel?: string;
+  engagementLabel?: string;
+};
+
+type DashboardResponse = {
+  studio: Studio;
+  metrics: Metrics;
+  recentMovies: Movie[];
 };
 
 export default function StudioDashboard() {
@@ -68,43 +78,123 @@ export default function StudioDashboard() {
     { id: "m5", title: "Movie 5" },
   ];
 
+  const [dashboardData, setDashboardData] = useState<DashboardResponse | null>(null);
+  const [movieResults, setMovieResults] = useState<Movie[] | null>(null);
+  const [loadingDashboard, setLoadingDashboard] = useState(true);
+  const [loadingSearch, setLoadingSearch] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const studioId = "11111111-1111-1111-1111-111111111111";
+  const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+
   const [query, setQuery] = useState("");
 
-  const accent = mockStudio.brandAccent;
+  useEffect(() => {
+    const loadDashboard = async () => {
+      try {
+        setLoadingDashboard(true);
+        setError(null);
+
+        const res = await fetch(
+            `${apiBaseUrl}/api/v1/studios/${studioId}`,
+            { cache: "no-store" }
+        );
+
+        if (!res.ok) {
+          throw new Error(`Failed to load dashboard: ${res.status}`);
+        }
+
+        const data: DashboardResponse = await res.json();
+        setDashboardData(data);
+      } catch (err) {
+        console.error(err);
+        setError("Failed to load dashboard data.");
+      } finally {
+        setLoadingDashboard(false);
+      }
+    };
+
+    if (apiBaseUrl) {
+      loadDashboard();
+    } else {
+      setError("Missing NEXT_PUBLIC_API_BASE_URL");
+      setLoadingDashboard(false);
+    }
+  }, [apiBaseUrl, studioId]);
+
+  useEffect(() => {
+    if (!apiBaseUrl) return;
+
+    const timeout = setTimeout(async () => {
+      try {
+        setLoadingSearch(true);
+
+        const res = await fetch(
+            `${apiBaseUrl}/api/v1/studios/${studioId}/movies/search?query=${encodeURIComponent(query)}&limit=12`,
+            { cache: "no-store" }
+        );
+
+        if (!res.ok) {
+          throw new Error(`Search failed: ${res.status}`);
+        }
+
+        const data: Movie[] = await res.json();
+        setMovieResults(data);
+      } catch (err) {
+        console.error(err);
+        setMovieResults(null);
+      } finally {
+        setLoadingSearch(false);
+      }
+    }, 250);
+
+    return () => clearTimeout(timeout);
+  }, [apiBaseUrl, studioId, query]);
+
+  const studio = dashboardData?.studio ?? mockStudio;
+  const metrics = dashboardData?.metrics ?? mockMetrics;
+  const fallbackMovies = dashboardData?.recentMovies ?? mockRecentMovies;
+
+  const displayedMovies =
+      query.trim().length > 0
+          ? movieResults ?? []
+          : fallbackMovies;
+
+  const accent = studio.brandAccent;
 
   const kpis = useMemo(
-    () => [
-      {
-        label: "Total Movies",
-        value: mockMetrics.totalMovies,
-        Icon: Film,
-      },
-      {
-        label: "Avg rating",
-        value: mockMetrics.avgRating,
-        Icon: Star,
-      },
-      {
-        label: "Creator risk score",
-        value: mockMetrics.creatorRiskScore,
-        Icon: TrendingUp,
-      },
-      {
-        label: mockMetrics.extraLabel ?? "Profit",
-        value:
-          mockMetrics.extraLabel && mockMetrics.extraValue !== undefined
-            ? mockMetrics.extraValue
-            : mockMetrics.profit !== undefined
-            ? `$${formatCompact(mockMetrics.profit)}`
-            : "—",
-        Icon: ThumbsUp,
-      },
-    ],
-    [mockMetrics]
+      () => [
+        {
+          label: "Total Movies",
+          value: metrics.totalMovies,
+          Icon: Film,
+        },
+        {
+          label: "Avg rating",
+          value: metrics.avgRating,
+          Icon: Star,
+        },
+        {
+          label: "Creator risk score",
+          value: metrics.creatorRiskScore,
+          Icon: TrendingUp,
+        },
+        {
+          label: metrics.extraLabel ?? "Profit",
+          value:
+              metrics.extraLabel && metrics.extraValue !== undefined
+                  ? metrics.extraValue
+                  : metrics.profit !== undefined
+                      ? `$${formatCompact(metrics.profit)}`
+                      : "—",
+          Icon: ThumbsUp,
+        },
+      ],
+      [metrics]
   );
 
-  
-  const movieBlocks = useMemo(() => mockRecentMovies.slice(0, 5), [mockRecentMovies]);
+
+  const movieBlocks = useMemo(() => displayedMovies.slice(0, 5), [displayedMovies]);
 
   return (
     <div className="h-screen w-screen bg-[#0B0B0B] text-white">
@@ -138,10 +228,10 @@ export default function StudioDashboard() {
                       className="rounded-[6px] px-2.5 py-1 text-sm font-extrabold tracking-wide text-white"
                       style={{ backgroundColor: accent }}
                     >
-                      {mockStudio.logoTextLeft ?? mockStudio.name.split(" ")[0].toUpperCase()}
+                      {studio.logoTextLeft ?? studio.name.split(" ")[0].toUpperCase()}
                     </div>
                     <div className="text-xl font-semibold tracking-wide">
-                      {mockStudio.logoTextRight ?? mockStudio.name.split(" ").slice(1).join(" ").toUpperCase()}
+                      {studio.logoTextRight ?? studio.name.split(" ").slice(1).join(" ").toUpperCase()}
                     </div>
                   </div>
                 </div>
@@ -177,7 +267,7 @@ export default function StudioDashboard() {
                 </button>
 
                 <div className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/5 text-sm font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
-                  {mockStudio.initials}
+                  {studio.initials}
                 </div>
               </div>
             </header>
@@ -187,7 +277,23 @@ export default function StudioDashboard() {
             </div>
 
             <main className="flex-1 overflow-y-auto px-6 py-6">
-              
+              {loadingDashboard && (
+                  <div className="mb-4 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/70">
+                    Loading dashboard...
+                  </div>
+              )}
+
+              {error && (
+                  <div className="mb-4 rounded-xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                    {error}
+                  </div>
+              )}
+
+              {loadingSearch && query.trim().length > 0 && (
+                  <div className="mb-4 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/70">
+                    Searching movies...
+                  </div>
+              )}
               <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 {kpis.map(({ label, value, Icon }) => (
                   <div
@@ -216,20 +322,20 @@ export default function StudioDashboard() {
                 <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
                   
                   <div className="lg:col-span-1">
-                    <MoviePlaceholderCard accent={accent} hoverAccent />
+                    <MoviePlaceholderCard accent={accent} hoverAccent movie={movieBlocks[0]} />
                   </div>
 
                   {/* 3 blocks to the right */}
                   <div className="lg:col-span-3">
                     <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-                      <MoviePlaceholderCard accent={accent} hoverAccent />
-                      <MoviePlaceholderCard accent={accent} hoverAccent/>
-                      <MoviePlaceholderCard accent={accent} hoverAccent />
+                      <MoviePlaceholderCard accent={accent} hoverAccent movie={movieBlocks[1]} />
+                      <MoviePlaceholderCard accent={accent} hoverAccent movie={movieBlocks[2]} />
+                      <MoviePlaceholderCard accent={accent} hoverAccent movie={movieBlocks[3]} />
                     </div>
                   </div>
 
                   <div className="lg:col-span-1">
-                    <MoviePlaceholderCard accent={accent} hoverAccent />
+                    <MoviePlaceholderCard accent={accent} hoverAccent movie={movieBlocks[4]} />
                   </div>
 
                  
@@ -245,45 +351,79 @@ export default function StudioDashboard() {
 }
 
 function MoviePlaceholderCard({
-  accent,
-  hoverAccent,
-}: {
+                                accent,
+                                hoverAccent,
+                                movie,
+                              }: {
   accent: string;
   hoverAccent?: boolean;
+  movie?: Movie;
 }) {
   return (
-    <div
-      className={[
-        "cursor-pointer group relative h-90 w-full rounded-[22px] border bg-white/5",
-        "border-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]",
-      ].join(" ")}
-        style={
+      <div
+          className={[
+            "cursor-pointer group relative h-90 w-full overflow-hidden rounded-[22px] border bg-white/5",
+            "border-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]",
+          ].join(" ")}
+          style={
             hoverAccent
-            ? {
-                borderColor: "rgba(255,255,255,0.10)",
+                ? {
+                  borderColor: "rgba(255,255,255,0.10)",
                 }
-            : undefined
-        }
-    >
+                : undefined
+          }
+      >
+        {movie?.posterUrl ? (
+            <img
+                src={movie.posterUrl}
+                alt={movie.title}
+                className="absolute inset-0 h-full w-full object-cover"
+            />
+        ) : (
+            <div className="absolute inset-0 rounded-[22px] bg-gradient-to-br from-white/10 to-white/0" />
+        )}
 
-      {hoverAccent && (
-        <div
-          className="pointer-events-none absolute inset-0 rounded-[22px] opacity-0 transition-opacity duration-200 group-hover:opacity-100"
-          style={{
-            boxShadow: `0 0 0 1px ${hexToRgba(accent, 0.9)}, 0 25px 60px rgba(0,0,0,0.55)`,
-            border: `1px solid ${hexToRgba(accent, 0.9)}`,
-          }}
-        />
-      )}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent" />
 
-      {/* empty block content */}
-      <div className="absolute inset-0 rounded-[22px] bg-gradient-to-b from-white/0 to-black/10" />
+        {hoverAccent && (
+            <div
+                className="pointer-events-none absolute inset-0 rounded-[22px] opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+                style={{
+                  boxShadow: `0 0 0 1px ${hexToRgba(accent, 0.9)}, 0 25px 60px rgba(0,0,0,0.55)`,
+                  border: `1px solid ${hexToRgba(accent, 0.9)}`,
+                }}
+            />
+        )}
 
-      {/* little floating circle */}
-      <div className="absolute left-1/2 top-1/2 flex h-12 w-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-[#2E3440] text-white/80 shadow-[0_10px_25px_rgba(0,0,0,0.6)] ring-1 ring-white/10">
-        A
+        <div className="absolute inset-x-0 bottom-0 p-4">
+          <div className="text-lg font-semibold text-white">
+            {movie?.title ?? "No title"}
+          </div>
+
+          {movie?.year && (
+              <div className="mt-1 text-sm text-white/70">{movie.year}</div>
+          )}
+
+          {movie?.summary && (
+              <p className="mt-2 line-clamp-3 text-sm text-white/75">
+                {movie.summary}
+              </p>
+          )}
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            {movie?.sentimentLabel && (
+                <span className="rounded-full bg-white/10 px-2.5 py-1 text-xs text-white/85">
+              {movie.sentimentLabel}
+            </span>
+            )}
+            {movie?.engagementLabel && (
+                <span className="rounded-full bg-white/10 px-2.5 py-1 text-xs text-white/85">
+              {movie.engagementLabel}
+            </span>
+            )}
+          </div>
+        </div>
       </div>
-    </div>
   );
 }
 
