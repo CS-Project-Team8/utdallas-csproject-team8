@@ -319,26 +319,15 @@ export default function StudioDashboard() {
 
               {/* Recent movies blocks area */}
               <section className="mt-6">
-                <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
-                  
-                  <div className="lg:col-span-1">
-                    <MoviePlaceholderCard accent={accent} hoverAccent movie={movieBlocks[0]} />
-                  </div>
-
-                  {/* 3 blocks to the right */}
-                  <div className="lg:col-span-3">
-                    <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-                      <MoviePlaceholderCard accent={accent} hoverAccent movie={movieBlocks[1]} />
-                      <MoviePlaceholderCard accent={accent} hoverAccent movie={movieBlocks[2]} />
-                      <MoviePlaceholderCard accent={accent} hoverAccent movie={movieBlocks[3]} />
-                    </div>
-                  </div>
-
-                  <div className="lg:col-span-1">
-                    <MoviePlaceholderCard accent={accent} hoverAccent movie={movieBlocks[4]} />
-                  </div>
-
-                 
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
+                  {movieBlocks.map((movie) => (
+                      <MoviePlaceholderCard
+                          key={movie.id}
+                          accent={accent}
+                          hoverAccent
+                          movie={movie}
+                      />
+                  ))}
                 </div>
 
               </section>
@@ -359,6 +348,14 @@ function MoviePlaceholderCard({
   hoverAccent?: boolean;
   movie?: Movie;
 }) {
+  const [imgFailed, setImgFailed] = useState(false);
+
+  useEffect(() => {
+    setImgFailed(false);
+  }, [movie?.posterUrl]);
+
+  const showPoster = Boolean(movie?.posterUrl) && !imgFailed;
+
   return (
       <div
           className={[
@@ -373,14 +370,31 @@ function MoviePlaceholderCard({
                 : undefined
           }
       >
-        {movie?.posterUrl ? (
+        {showPoster ? (
             <img
-                src={movie.posterUrl}
-                alt={movie.title}
+                src={movie!.posterUrl}
+                alt={movie?.title ?? "Movie poster"}
                 className="absolute inset-0 h-full w-full object-cover"
+                onError={() => setImgFailed(true)}
             />
         ) : (
-            <div className="absolute inset-0 rounded-[22px] bg-gradient-to-br from-white/10 to-white/0" />
+            <div className="absolute inset-0 bg-black">
+              <div
+                  className="absolute inset-x-0 top-0 h-1"
+                  style={{ backgroundColor: accent }}
+              />
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.08),transparent_35%)]" />
+              <div className="flex h-full w-full flex-col items-center justify-center px-6 text-center">
+                <div className="text-3xl font-extrabold uppercase tracking-[0.12em] text-white">
+                  {movie?.title ?? "Untitled"}
+                </div>
+                {movie?.year && (
+                    <div className="mt-2 text-sm tracking-[0.2em] text-white/50">
+                      {movie.year}
+                    </div>
+                )}
+              </div>
+            </div>
         )}
 
         <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent" />
@@ -396,16 +410,20 @@ function MoviePlaceholderCard({
         )}
 
         <div className="absolute inset-x-0 bottom-0 p-4">
-          <div className="text-lg font-semibold text-white">
-            {movie?.title ?? "No title"}
-          </div>
+          {showPoster && (
+              <>
+                <div className="text-lg font-semibold text-white">
+                  {movie?.title ?? "No title"}
+                </div>
 
-          {movie?.year && (
-              <div className="mt-1 text-sm text-white/70">{movie.year}</div>
+                {movie?.year && (
+                    <div className="mt-1 text-sm text-white/70">{movie.year}</div>
+                )}
+              </>
           )}
 
           {movie?.summary && (
-              <p className="mt-2 line-clamp-3 text-sm text-white/75">
+              <p className={`${showPoster ? "mt-2" : ""} line-clamp-3 text-sm text-white/75`}>
                 {movie.summary}
               </p>
           )}
