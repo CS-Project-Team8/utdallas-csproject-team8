@@ -1,251 +1,388 @@
-CREATE EXTENSION IF NOT EXISTS pgcrypto; 
+-- ============================================================
+-- YIP Full Schema (Local Postgres)
+-- ============================================================
+-- Run this script inside the yip database in DBeaver or pgAdmin.
+-- Notes:
+-- - All identifiers are lower-case (recommended for Postgres).
+-- - Uses pgcrypto for gen_random_uuid().
+-- ============================================================
 
-CREATE TABLE IF NOT EXISTS studios (  -- doesn't require YouTube data
-  studioId   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name        TEXT NOT NULL UNIQUE,
-  createdAt  TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updatedAt  TIMESTAMPTZ NOT NULL DEFAULT now()
+BEGIN;
+
+-- ----------------------------
+-- Extensions
+-- ----------------------------
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+-- ----------------------------
+-- Core: Studios + Users
+-- ----------------------------
+CREATE TABLE IF NOT EXISTS studios (
+  studioid   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name       TEXT NOT NULL UNIQUE,
+  createdat  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updatedat  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE IF NOT EXISTS studioUsers ( -- doesn't require YouTube data
-  userId        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  studioId      UUID NOT NULL REFERENCES studios(studioId) ON DELETE CASCADE,
-  email          TEXT NOT NULL UNIQUE,
-  passwordHash  TEXT NOT NULL,
-  role           TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('admin','member','read_only')),
-  isActive      BOOLEAN NOT NULL DEFAULT true,
-  createdAt     TIMESTAMPTZ NOT NULL DEFAULT now(),
-  prevLogin  TIMESTAMPTZ
+CREATE TABLE IF NOT EXISTS studiousers (
+  userid       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  studioid     UUID NOT NULL REFERENCES studios(studioid) ON DELETE CASCADE,
+  email        TEXT NOT NULL UNIQUE,
+  passwordhash TEXT NOT NULL,
+  role         TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('admin','member','read_only')),
+  isactive     BOOLEAN NOT NULL DEFAULT true,
+  createdat    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  prevlogin    TIMESTAMPTZ
 );
 
-CREATE INDEX IF NOT EXISTS idx_studio_users_studio_id 
-  ON studioUsers (studioId);
+CREATE INDEX IF NOT EXISTS idx_studiusers_studioid
+  ON studiousers (studioid);
 
-
-CREATE TABLE IF NOT EXISTS movies ( -- requires YouTube data (search for the top 5 most recent movie trailers for each studio)
-  movieId      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  studioId     UUID NOT NULL REFERENCES studios(studioId) ON DELETE CASCADE,
-  title         TEXT NOT NULL,
-  releaseDate  DATE,
-  status        TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','archived')),
-  createdAt    TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updatedAt    TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (studioId, title) 
+-- ----------------------------
+-- Movies + Studio Top 5
+-- ----------------------------
+CREATE TABLE IF NOT EXISTS movies (
+  movieid      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  studioid     UUID NOT NULL REFERENCES studios(studioid) ON DELETE CASCADE,
+  title        TEXT NOT NULL,
+  releasedate  DATE,
+  status       TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','archived')),
+  createdat    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updatedat    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (studioid, title)
 );
 
 CREATE INDEX IF NOT EXISTS idx_movies_studio_status
-  ON movies (studioId, status);
+  ON movies (studioid, status);
 
-
-CREATE TABLE IF NOT EXISTS studioTopMovies ( -- unsure if this requires YouTube data
-  studioId  UUID NOT NULL REFERENCES studios(studioId) ON DELETE CASCADE,
-  rank       INT  NOT NULL CHECK (rank BETWEEN 1 AND 5),
-  movieId   UUID NOT NULL REFERENCES movies(movieId) ON DELETE CASCADE,
-  asOf      TIMESTAMPTZ NOT NULL DEFAULT now(),
-  method     TEXT NOT NULL DEFAULT 'youtube_views',
-  PRIMARY KEY (studioId, rank),
-  UNIQUE (studioId, movieId)
+CREATE TABLE IF NOT EXISTS studiotopmovies (
+  studioid  UUID NOT NULL REFERENCES studios(studioid) ON DELETE CASCADE,
+  rank      INT  NOT NULL CHECK (rank BETWEEN 1 AND 5),
+  movieid   UUID NOT NULL REFERENCES movies(movieid) ON DELETE CASCADE,
+  asof      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  method    TEXT NOT NULL DEFAULT 'youtube_views',
+  PRIMARY KEY (studioid, rank),
+  UNIQUE (studioid, movieid)
 );
 
-CREATE INDEX IF NOT EXISTS idx_studio_top_movies_as_of
-  ON studioTopMovies (studioId, asOf DESC);
+CREATE INDEX IF NOT EXISTS idx_studiotopmovies_asof
+  ON studiotopmovies (studioid, asof DESC);
 
-
-CREATE TABLE IF NOT EXISTS ytChannels ( -- requires YouTube data (search for the top 5 most viewed movie reviews for each movie & extract channel info)
-  channelId     TEXT PRIMARY KEY,         
-  channelTitle  TEXT NOT NULL,
+-- ----------------------------
+-- YouTube: Channels + Videos
+-- ----------------------------
+CREATE TABLE IF NOT EXISTS ytchannels (
+  channelid     TEXT PRIMARY KEY,
+  channeltitle  TEXT NOT NULL,
   country       TEXT,
-  createdAt     TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updatedAt     TIMESTAMPTZ NOT NULL DEFAULT now()
+  createdat     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updatedat     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE IF NOT EXISTS ytVideos ( -- requires YouTube data (search for the top 5 most viewed movie reviews for each movie & extract ytvideo info)
-  videoId          TEXT PRIMARY KEY,      -- YouTube videoId
-  channelId        TEXT NOT NULL REFERENCES ytChannels(channelId) ON DELETE RESTRICT,
-  title             TEXT NOT NULL,
-  description       TEXT,
-  publishedAt      TIMESTAMPTZ NOT NULL,
-  durationSeconds  INT,
-  categoryId       TEXT,
-  defaultLanguage  TEXT,
-  tags              JSONB,                 
-  caption           BOOLEAN,
-  createdAt        TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updatedAt        TIMESTAMPTZ NOT NULL DEFAULT now()
+CREATE TABLE IF NOT EXISTS ytvideos ( -- what does caption do?
+  videoid          TEXT PRIMARY KEY,
+  channelid        TEXT NOT NULL REFERENCES ytchannels(channelid) ON DELETE RESTRICT,
+  title            TEXT NOT NULL,
+  description      TEXT,
+  publishedat      TIMESTAMPTZ NOT NULL,
+  durationseconds  INT,
+  categoryid       TEXT,
+  defaultlanguage  TEXT,
+  tags             JSONB,
+  caption          BOOLEAN,
+  createdat        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updatedat        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_yt_videos_channel_id
-  ON ytVideos (channelId);
+CREATE INDEX IF NOT EXISTS idx_ytvideos_channelid
+  ON ytvideos (channelid);
 
-CREATE INDEX IF NOT EXISTS idx_yt_videos_published_at
-  ON ytVideos (publishedAt);
+CREATE INDEX IF NOT EXISTS idx_ytvideos_publishedat
+  ON ytvideos (publishedat);
 
-
-CREATE TABLE IF NOT EXISTS movieYtVideos (  -- requires YouTube data (search for the top 5 most recent movie trailers for each studio & extract ytvideo info)
-  movieId    UUID NOT NULL REFERENCES movies(movieId) ON DELETE CASCADE,
-  videoId    TEXT NOT NULL REFERENCES ytVideos(videoId) ON DELETE CASCADE,
-  videoRole  TEXT NOT NULL DEFAULT 'official_trailer'
-    CHECK (videoRole IN ('official_trailer','teaser','clip','tv_spot','featurette','other')),
-  isPrimary  BOOLEAN NOT NULL DEFAULT false,
-  weight      DOUBLE PRECISION NOT NULL DEFAULT 1.0,
-  addedAt    TIMESTAMPTZ NOT NULL DEFAULT now(),
-  PRIMARY KEY (movieId, videoId)
+-- ----------------------------
+-- Transcripts (must come before segments)
+-- ----------------------------
+CREATE TABLE IF NOT EXISTS ytvideotranscripts (
+  transcriptid  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  videoid       TEXT NOT NULL REFERENCES ytvideos(videoid) ON DELETE CASCADE,
+  language      TEXT NOT NULL DEFAULT 'en',
+  source        TEXT NOT NULL DEFAULT 'manual' CHECK (source = ANY (ARRAY['manual','auto','other'])),
+  fetchedat     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  fulltext      TEXT NOT NULL,
+  UNIQUE (videoid, language, fetchedat)
 );
 
-CREATE INDEX IF NOT EXISTS idx_movie_yt_videos_movie_role_primary
-  ON movieYtVideos (movieId, videoRole, isPrimary);
+CREATE TABLE IF NOT EXISTS yttranscriptsegments ( -- do we need this table?
+  segmentid       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  transcriptid    UUID NOT NULL REFERENCES ytvideotranscripts(transcriptid) ON DELETE CASCADE,
+  startseconds    INT NOT NULL,
+  durationseconds INT,
+  text            TEXT NOT NULL
+);
 
-CREATE INDEX IF NOT EXISTS idx_movie_yt_videos_video_id
-  ON movieYtVideos (videoId);
+-- ----------------------------
+-- Movie <-> YouTube Videos Link
+-- ----------------------------
+CREATE TABLE IF NOT EXISTS movieytvideos (
+  movieid    UUID NOT NULL REFERENCES movies(movieid) ON DELETE CASCADE,
+  videoid    TEXT NOT NULL REFERENCES ytvideos(videoid) ON DELETE CASCADE,
+  videorole  TEXT NOT NULL DEFAULT 'official_trailer'
+    CHECK (videorole IN ('official_trailer','teaser','clip','tv_spot','featurette','review','other')),
+  isprimary  BOOLEAN NOT NULL DEFAULT false,
+  weight     DOUBLE PRECISION NOT NULL DEFAULT 1.0,
+  addedat    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (movieid, videoid)
+);
 
+CREATE INDEX IF NOT EXISTS idx_movieytvideos_movie_role_primary
+  ON movieytvideos (movieid, videorole, isprimary);
+
+CREATE INDEX IF NOT EXISTS idx_movieytvideos_videoid
+  ON movieytvideos (videoid);
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_movie_one_primary
-  ON movieYtVideos (movieId)
-  WHERE isPrimary = true;
+  ON movieytvideos (movieid)
+  WHERE isprimary = true;
 
-
-CREATE TABLE IF NOT EXISTS ytVideoMetricSnapshots ( -- requires YouTube data (search for the top 5 most viewed movie reviews for each movie & extract ytvideo info)
-  videoId       TEXT NOT NULL REFERENCES ytVideos(videoId) ON DELETE CASCADE,
-  capturedAt    TIMESTAMPTZ NOT NULL,
-  viewCount     BIGINT NOT NULL,
-  likeCount     BIGINT,
-  commentCount  BIGINT NOT NULL,
-  PRIMARY KEY (videoId, capturedAt)
+-- ----------------------------
+-- Video Metric Snapshots
+-- ----------------------------
+CREATE TABLE IF NOT EXISTS ytvideometricsnapshots (
+  videoid      TEXT NOT NULL REFERENCES ytvideos(videoid) ON DELETE CASCADE,
+  capturedat   TIMESTAMPTZ NOT NULL,
+  viewcount    BIGINT NOT NULL,
+  likecount    BIGINT,
+  commentcount BIGINT NOT NULL,
+  PRIMARY KEY (videoid, capturedat)
 );
 
-CREATE INDEX IF NOT EXISTS idx_yt_video_metric_snapshots_captured_at
-  ON ytVideoMetricSnapshots (capturedAt);
+CREATE INDEX IF NOT EXISTS idx_ytvideometricsnapshots_capturedat
+  ON ytvideometricsnapshots (capturedat);
 
-
-CREATE TABLE IF NOT EXISTS movieMetricSnapshots ( -- requires YouTube data (search for the top 5 most recent movie trailers for each studio & extract ytvideo info)
-  movieId          UUID NOT NULL REFERENCES movies(movieId) ON DELETE CASCADE,
-  capturedAt       TIMESTAMPTZ NOT NULL,
-  viewsTotal       BIGINT NOT NULL,
-  likesTotal       BIGINT,
-  commentsTotal    BIGINT NOT NULL,
-
-  
-  viewsDelta1d    BIGINT,
-  viewsDelta7d    BIGINT,
-
-  
-  engagementRate   DOUBLE PRECISION, 
-
-  PRIMARY KEY (movieId, capturedAt)
+-- ----------------------------
+-- Movie Metric Snapshots
+-- ----------------------------
+CREATE TABLE IF NOT EXISTS moviemetricsnapshots (
+  movieid         UUID NOT NULL REFERENCES movies(movieid) ON DELETE CASCADE,
+  capturedat      TIMESTAMPTZ NOT NULL,
+  viewstotal      BIGINT NOT NULL,
+  likestotal      BIGINT,
+  commentstotal   BIGINT NOT NULL,
+  viewsdelta1d    BIGINT,
+  viewsdelta7d    BIGINT,
+  engagementrate  DOUBLE PRECISION, -- calculated as (total likes + total comments) / total views, can be null if no views
+  PRIMARY KEY (movieid, capturedat)
 );
 
-CREATE INDEX IF NOT EXISTS idx_movie_metric_snapshots_movie_time
-  ON movieMetricSnapshots (movieId, capturedAt DESC);
+CREATE INDEX IF NOT EXISTS idx_moviemetricsnapshots_movie_time
+  ON moviemetricsnapshots (movieid, capturedat DESC);
 
-
-CREATE TABLE IF NOT EXISTS ytCommentThreads ( -- requires YouTube data (search for the top 5 most viewed movie reviews for each movie & extract comments info) & MAY NOT NEED THIS TABLE?
-  threadId          TEXT PRIMARY KEY, 
-  videoId           TEXT NOT NULL REFERENCES ytVideos(videoId) ON DELETE CASCADE,
-  totalReplyCount  INT NOT NULL DEFAULT 0,
-  lastFetchedAt    TIMESTAMPTZ
+-- ----------------------------
+-- Comments + Threads
+-- ----------------------------
+CREATE TABLE IF NOT EXISTS ytcommentthreads (
+  threadid         TEXT PRIMARY KEY,
+  videoid          TEXT NOT NULL REFERENCES ytvideos(videoid) ON DELETE CASCADE,
+  totalreplycount  INT NOT NULL DEFAULT 0,
+  lastfetchedat    TIMESTAMPTZ
 );
 
-CREATE INDEX IF NOT EXISTS idx_yt_comment_threads_video_id
-  ON ytCommentThreads (videoId);
+CREATE INDEX IF NOT EXISTS idx_ytcommentthreads_videoid
+  ON ytcommentthreads (videoid);
 
-
-CREATE TABLE IF NOT EXISTS ytComments ( -- requires YouTube data (search for the top 5 most viewed movie reviews for each movie & extract comments info)
-  commentId         TEXT PRIMARY KEY, 
-  videoId           TEXT NOT NULL REFERENCES ytVideos(videoId) ON DELETE CASCADE,
-  threadId          TEXT REFERENCES ytCommentThreads(threadId) ON DELETE SET NULL,
-  parentCommentId  TEXT,             
-  text               TEXT NOT NULL,
-  likeCount         INT NOT NULL DEFAULT 0,
-  authorChannelId  TEXT,
-  publishedAt       TIMESTAMPTZ NOT NULL,
-  updatedAt         TIMESTAMPTZ NOT NULL,
-  ingestedAt        TIMESTAMPTZ NOT NULL DEFAULT now()
+CREATE TABLE IF NOT EXISTS ytcomments (
+  commentid        TEXT PRIMARY KEY,
+  videoid          TEXT NOT NULL REFERENCES ytvideos(videoid) ON DELETE CASCADE,
+  threadid         TEXT REFERENCES ytcommentthreads(threadid) ON DELETE SET NULL,
+  parentcommentid  TEXT,
+  text             TEXT NOT NULL,
+  likecount        INT NOT NULL DEFAULT 0,
+  authorchannelid  TEXT,
+  publishedat      TIMESTAMPTZ NOT NULL,
+  updatedat        TIMESTAMPTZ NOT NULL,
+  ingestedat       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_yt_comments_video_published
-  ON ytComments (videoId, publishedAt DESC);
+CREATE INDEX IF NOT EXISTS idx_ytcomments_video_published
+  ON ytcomments (videoid, publishedat DESC);
 
-CREATE INDEX IF NOT EXISTS idx_yt_comments_video_updated
-  ON ytComments (videoId, updatedAt DESC);
+CREATE INDEX IF NOT EXISTS idx_ytcomments_video_updated
+  ON ytcomments (videoid, updatedat DESC);
 
-CREATE INDEX IF NOT EXISTS idx_yt_comments_parent
-  ON ytComments (parentCommentId);
+CREATE INDEX IF NOT EXISTS idx_ytcomments_parent
+  ON ytcomments (parentcommentid);
 
-
-CREATE TABLE IF NOT EXISTS insightRuns ( -- does not require YouTube data 
-  runId      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  studioId   UUID NOT NULL REFERENCES studios(studioId) ON DELETE CASCADE,
-  runScope   TEXT NOT NULL DEFAULT 'top5', 
-  status      TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued','running','success','failed')),
-  params      JSONB,
-  startedAt  TIMESTAMPTZ NOT NULL DEFAULT now(),
-  finishedAt TIMESTAMPTZ,
-  error       TEXT
+-- ----------------------------
+-- Insight Runs + Outputs
+-- ----------------------------
+CREATE TABLE IF NOT EXISTS insightruns (
+  runid      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  studioid   UUID NOT NULL REFERENCES studios(studioid) ON DELETE CASCADE,
+  runscope   TEXT NOT NULL DEFAULT 'top5',
+  status     TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued','running','success','failed')),
+  params     JSONB,
+  startedat  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  finishedat TIMESTAMPTZ,
+  error      TEXT
 );
 
-CREATE INDEX IF NOT EXISTS idx_insight_runs_studio_started
-  ON insightRuns (studioId, startedAt DESC);
+CREATE INDEX IF NOT EXISTS idx_insightruns_studio_started
+  ON insightruns (studioid, startedat DESC);
 
-
-CREATE TABLE IF NOT EXISTS movieInsights ( -- does not require YouTube data 
-  runId          UUID NOT NULL REFERENCES insightRuns(runId) ON DELETE CASCADE,
-  movieId        UUID NOT NULL REFERENCES movies(movieId) ON DELETE CASCADE,
+CREATE TABLE IF NOT EXISTS movieinsights (
+  runid           UUID NOT NULL REFERENCES insightruns(runid) ON DELETE CASCADE,
+  movieid         UUID NOT NULL REFERENCES movies(movieid) ON DELETE CASCADE,
   summary         TEXT NOT NULL,
-  keyTakeaways   JSONB, 
-  recommendations JSONB, 
-  createdAt      TIMESTAMPTZ NOT NULL DEFAULT now(),
-  PRIMARY KEY (runId, movieId)
+  keytakeaways    JSONB,
+  recommendations JSONB,
+  createdat       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (runid, movieid)
 );
 
-CREATE INDEX IF NOT EXISTS idx_movie_insights_movie_run
-  ON movieInsights (movieId, runId);
+CREATE INDEX IF NOT EXISTS idx_movieinsights_movie_run
+  ON movieinsights (movieid, runid);
 
-
-CREATE TABLE IF NOT EXISTS movieTopics ( -- does not require YouTube data 
-  topicId         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  runId           UUID NOT NULL REFERENCES insightRuns(runId) ON DELETE CASCADE,
-  movieId         UUID NOT NULL REFERENCES movies(movieId) ON DELETE CASCADE,
-
-  label            TEXT NOT NULL, 
-  summary          TEXT NOT NULL,  
-  keywords         JSONB,          
-
-  sentimentAvg    DOUBLE PRECISION,  
-  volume           INT NOT NULL DEFAULT 0, 
-  consensusScore  DOUBLE PRECISION,  
-  controversyScore DOUBLE PRECISION, 
-
-  createdAt       TIMESTAMPTZ NOT NULL DEFAULT now()
+CREATE TABLE IF NOT EXISTS movietopics (
+  topicid           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  runid             UUID NOT NULL REFERENCES insightruns(runid) ON DELETE CASCADE,
+  movieid           UUID NOT NULL REFERENCES movies(movieid) ON DELETE CASCADE,
+  label             TEXT NOT NULL,
+  summary           TEXT NOT NULL,
+  keywords          JSONB,
+  sentimentavg      DOUBLE PRECISION,
+  volume            INT NOT NULL DEFAULT 0,
+  consensusscore    DOUBLE PRECISION,
+  controversyscore  DOUBLE PRECISION,
+  createdat         TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_movie_topics_movie_run
-  ON movieTopics (movieId, runId);
+CREATE INDEX IF NOT EXISTS idx_movietopics_movie_run
+  ON movietopics (movieid, runid);
 
-CREATE INDEX IF NOT EXISTS idx_movie_topics_run
-  ON movieTopics (runId);
+CREATE INDEX IF NOT EXISTS idx_movietopics_run
+  ON movietopics (runid);
 
-
-CREATE TABLE IF NOT EXISTS topicEvidenceComments ( -- unsure if this requires YouTube data
-  topicId    UUID NOT NULL REFERENCES movieTopics(topicId) ON DELETE CASCADE,
-  commentId  TEXT NOT NULL REFERENCES ytComments(commentId) ON DELETE CASCADE,
-  relevance   DOUBLE PRECISION NOT NULL DEFAULT 0.0,
-  createdAt  TIMESTAMPTZ NOT NULL DEFAULT now(),
-  PRIMARY KEY (topicId, commentId)
+CREATE TABLE IF NOT EXISTS topicevidencecomments (
+  topicid    UUID NOT NULL REFERENCES movietopics(topicid) ON DELETE CASCADE,
+  commentid  TEXT NOT NULL REFERENCES ytcomments(commentid) ON DELETE CASCADE,
+  relevance  DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+  createdat  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (topicid, commentid)
 );
 
-CREATE INDEX IF NOT EXISTS idx_topic_evidence_topic
-  ON topicEvidenceComments (topicId, relevance DESC);
+CREATE INDEX IF NOT EXISTS idx_topicevidence_topic
+  ON topicevidencecomments (topicid, relevance DESC);
 
-CREATE INDEX IF NOT EXISTS idx_topic_evidence_comment
-  ON topicEvidenceComments (commentId);
+CREATE INDEX IF NOT EXISTS idx_topicevidence_comment
+  ON topicevidencecomments (commentid);
 
-
-CREATE TABLE IF NOT EXISTS movieTopicAggregates ( -- unsure if this requires YouTube data
-  topicId         UUID PRIMARY KEY REFERENCES movieTopics(topicId) ON DELETE CASCADE,
-  commentCount    INT NOT NULL,
-  posPct          DOUBLE PRECISION,
-  negPct          DOUBLE PRECISION,
-  neuPct          DOUBLE PRECISION,
-  topKeywords     JSONB,
-  updatedAt       TIMESTAMPTZ NOT NULL DEFAULT now()
+CREATE TABLE IF NOT EXISTS movietopicaggregates (
+  topicid       UUID PRIMARY KEY REFERENCES movietopics(topicid) ON DELETE CASCADE,
+  commentcount  INT NOT NULL,
+  pospct        DOUBLE PRECISION,
+  negpct        DOUBLE PRECISION,
+  neupct        DOUBLE PRECISION,
+  topkeywords   JSONB,
+  updatedat     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+CREATE TABLE IF NOT EXISTS movieinsightpayloads (
+  runid                UUID NOT NULL REFERENCES insightruns(runid) ON DELETE CASCADE,
+  movieid              UUID NOT NULL REFERENCES movies(movieid) ON DELETE CASCADE,
+  movie_title          TEXT,
+  key_takeaways        JSONB NOT NULL DEFAULT '[]'::jsonb,
+  top_narratives       JSONB NOT NULL DEFAULT '[]'::jsonb,
+  sentiment_breakdown  JSONB NOT NULL DEFAULT '{}'::jsonb,
+  top_words            JSONB NOT NULL DEFAULT '[]'::jsonb,
+  mood_signals         JSONB NOT NULL DEFAULT '[]'::jsonb,
+  creator_risk         JSONB NOT NULL DEFAULT '{}'::jsonb,
+  createdat            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updatedat            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (runid, movieid)
+);
+
+CREATE INDEX IF NOT EXISTS idx_movieinsightpayloads_movie_run
+  ON movieinsightpayloads (movieid, runid);
+
+CREATE INDEX IF NOT EXISTS idx_movieinsightpayloads_run
+  ON movieinsightpayloads (runid);
+
+CREATE INDEX IF NOT EXISTS gin_movieinsightpayloads_key_takeaways
+  ON movieinsightpayloads USING GIN (key_takeaways);
+
+CREATE INDEX IF NOT EXISTS gin_movieinsightpayloads_top_narratives
+  ON movieinsightpayloads USING GIN (top_narratives);
+
+CREATE INDEX IF NOT EXISTS gin_movieinsightpayloads_sentiment_breakdown
+  ON movieinsightpayloads USING GIN (sentiment_breakdown);
+
+CREATE INDEX IF NOT EXISTS gin_movieinsightpayloads_creator_risk
+  ON movieinsightpayloads USING GIN (creator_risk);
+
+-- ----------------------------
+-- Analytics Snapshots
+-- ----------------------------
+CREATE TABLE IF NOT EXISTS movieanalyticssnapshots (
+  snapshotid          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  movieid             UUID NOT NULL REFERENCES movies(movieid) ON DELETE CASCADE,
+  computedat          TIMESTAMPTZ NOT NULL DEFAULT now(),
+  totalreviewvideos   INT NOT NULL DEFAULT 0,
+  averagesentiment    DOUBLE PRECISION,
+  totalviews          BIGINT,
+  totallikes          BIGINT,
+  pospct              DOUBLE PRECISION,
+  negpct              DOUBLE PRECISION,
+  neupct              DOUBLE PRECISION,
+  topsentimentwords   JSONB,
+  creatorriskscore    DOUBLE PRECISION CHECK (creatorriskscore >= 0 AND creatorriskscore <= 100),
+  moodsignals         JSONB,
+  keydiscussiontopics JSONB
+);
+
+CREATE TABLE IF NOT EXISTS moviediscussiontopics (
+  topicid    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  movieid    UUID NOT NULL REFERENCES movies(movieid) ON DELETE CASCADE,
+  computedat TIMESTAMPTZ NOT NULL DEFAULT now(),
+  topiclabel TEXT NOT NULL,
+  pct        DOUBLE PRECISION NOT NULL CHECK (pct >= 0 AND pct <= 1),
+  keywords   JSONB,
+  summary    TEXT
+);
+
+CREATE TABLE IF NOT EXISTS movieengagedreviewvideos (
+  movieid         UUID NOT NULL REFERENCES movies(movieid) ON DELETE CASCADE,
+  computedat      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  videoid         TEXT NOT NULL REFERENCES ytvideos(videoid) ON DELETE CASCADE,
+  rank            INT NOT NULL,
+  views           BIGINT,
+  likes           BIGINT,
+  comments        BIGINT,
+  engagementrate  DOUBLE PRECISION,
+  PRIMARY KEY (movieid, computedat, rank),
+  UNIQUE (movieid, computedat, videoid)
+);
+
+CREATE TABLE IF NOT EXISTS moviereviewvelocity (
+  movieid            UUID NOT NULL REFERENCES movies(movieid) ON DELETE CASCADE,
+  weekstart          DATE NOT NULL,
+  computedat         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  reviewsthisweek    INT NOT NULL DEFAULT 0,
+  cumulativereviews  INT NOT NULL DEFAULT 0,
+  PRIMARY KEY (movieid, weekstart, computedat)
+);
+
+CREATE TABLE IF NOT EXISTS moviesentimenttimeline (
+  movieid           UUID NOT NULL REFERENCES movies(movieid) ON DELETE CASCADE,
+  periodstart       DATE NOT NULL,
+  periodend         DATE NOT NULL,
+  computedat        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  avgsentiment      DOUBLE PRECISION,
+  pospct            DOUBLE PRECISION,
+  negpct            DOUBLE PRECISION,
+  neupct            DOUBLE PRECISION,
+  reviewvideocount  INT NOT NULL DEFAULT 0,
+  PRIMARY KEY (movieid, periodstart, computedat)
+);
+
+COMMIT;
