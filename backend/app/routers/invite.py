@@ -64,7 +64,7 @@ async def create_invite(payload: InviteCreateRequest, current_user=Depends(get_c
         "updatedAt": firestore.SERVER_TIMESTAMP,
     })
 
-    invite_link = f"{FRONTEND_URL}/accept-invite?token={token}&email={normalized_email}"
+    invite_link = f"{FRONTEND_URL}/admin/acceptInvite?token={token}&email={normalized_email}"
 
     send_invite_email(
         to_email=normalized_email,
