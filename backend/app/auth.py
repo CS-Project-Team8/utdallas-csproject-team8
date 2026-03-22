@@ -9,7 +9,7 @@ async def verify_user(authorization: str = Header(...)):
 
     try:
         decoded = firebase_auth.verify_id_token(token)
-        uid = decoded["uid"]
+        # uid = decoded["uid"]
         return decoded
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
