@@ -33,18 +33,40 @@ export default function AdminLoginPage() {
       const data = await res.json();
 
       if (!res.ok || !data.ok) {
-        setError(data.detail || "You are not authorized as admin.");
-        setLoading(false);
+        if (res.status === 404) {
+          setError("User not found in database.");
+        } else if (res.status === 403) {
+          setError("You are not an admin.");
+        } else if (res.status === 401) {
+          setError("Unauthorized. Please log in again.");
+        } else {
+          setError(data.detail || "Admin login failed.");
+        }
         return;
       }
 
       router.push("./admin/sendInvite");
     } catch (err: any) {
       console.error(err);
-      setError(err.message || "Login failed");
-    } finally {
-      setLoading(false);
-    }
+      switch (err.code) {
+        case "auth/invalid-credential":
+        case "auth/wrong-password":
+        case "auth/user-not-found":
+        case "auth/invalid-email":
+          setError("Invalid email or password.");
+          break;
+        case "auth/too-many-requests":
+          setError("Too many failed attempts. Please try again later.");
+          break;
+        case "auth/network-request-failed":
+          setError("Network error. Check your internet connection.");
+          break;
+        default:
+          setError(err.message || "Login failed.");
+        }
+      } finally {
+        setLoading(false);
+      }
   }
 
   return (

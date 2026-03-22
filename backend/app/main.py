@@ -1,7 +1,6 @@
 from fastapi import FastAPI
 from app.routers.dashboard import router as dashboard_router
 from fastapi.middleware.cors import CORSMiddleware
-from app.config import FRONTEND_URL
 from app.routers.auth import router as auth_router
 from app.routers.invite import router as invites_router
 
