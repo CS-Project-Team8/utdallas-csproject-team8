@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState } from "react";
 import { Mail, Shield, User2, Send, ChevronDown } from "lucide-react";
-import { auth } from "@/lib/firebase";
+import { getFirebaseAuth } from "@/lib/firebase";
 
 type Role = "admin" | "user" | "viewer";
 
@@ -41,6 +41,12 @@ export default function SendInvitePage() {
     setMessage("");
 
     try {
+      const auth = getFirebaseAuth();
+
+      if (!auth) {
+        throw new Error("Authentication is not configured.");
+      }
+
       const currentUser = auth.currentUser;
       if (!currentUser) {
         throw new Error("You must be logged in.");
