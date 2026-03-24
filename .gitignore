@@ -36,3 +36,4 @@ yarn-error.log*
 Thumbs.db
 .vscode/
 .idea/
+backend/app/services/dashboard_service.py
