@@ -2,6 +2,7 @@ import os
 import json
 from groq import Groq
 from dotenv import load_dotenv
+from db_test import load_llm_output
 
 load_dotenv()
 API_KEY = os.getenv("API_KEY")
@@ -116,7 +117,7 @@ You must return the following JSON structure exactly:
   ],
   "creator_risk": {
     "risk_score": <integer from 1-10>,
-    "risk_level": "<one of: low, moderate, high>",
+    "risk_level": "<either low, moderate, or high>",
     "summary": "<2-3 sentences about what this reviewer's reception suggests about franchise or content strategy risk>"
   }
 }
@@ -128,6 +129,133 @@ Guidelines:
 - Extract exactly 5 moods for mood_signals, each scored individually.
 - Key takeaways should be points a studio executive may need to know about public reaction to the movie.
 - There should be a total of 10 expressive words in top_words, taken directly from the most common sentiment words in the transcript
+"""
+
+COMMENTS_PROMPT = """
+You are an expert movie analyst that specializes in intelligence from movie studios and streaming companies. You will be given data
+in the form of the JSON object with a YouTube video's transcript analysis and the comments on that video. These comments are not associated 
+with an official movie studio and represent authentic public reaction of a movie or studio that the YouTube video is about. Your job is to 
+analyze this content and return a structured JSON object with insights. Do not return anything else. Do not include any explanation or text 
+outside of the JSON object. If a field cannot be determined from the provided data, use null.
+
+You must return the following JSON structure exactly:
+
+{
+  "movie": "<name of the specific movie being discussed>",
+  "claims": [
+    {
+      "claim": "<specific factual or opinion statement made by the comments>",
+      "sentiment": "<either positive, negative, or neutral>"
+    },
+    ...
+  ],
+  "sentiment_breakdown": {
+    "overall_sentiment": "<either positive, negative, or mixed>",
+    "average_sentiment_score": <number between -1.0 and 1.0>,
+    "positive_pct": <integer from 0-100>,
+    "negative_pct": <integer from 0-100>,
+    "neutral_pct": <integer from 0-100>,
+    "summary": "<1-2 sentences describing the audience reaction to this video>"
+  },
+  "top_words": [
+    {
+      "word": "<single impactful word used in the comments>",
+      "sentiment": "<either positive, negative, or mixed>"
+    },
+    ...
+  ],
+  "mood_signals": [
+    {
+      "mood": "<single mood like Excitement, Nostalgia, Disappointment, etc>",
+      "percentage": <integer from 0-100, estimating how strongly this mood is present in the comments>
+    },
+    ...
+  ],
+  "agreeability": "<either mostly_agrees, mostly_disagrees, mixed>",
+  "video_alignment": "<2-3 sentences describing where the audience aligns with the reviewer's opinion>"
+}
+
+Guidelines:
+- Focus on the comments' reactions. Highlight if they are agreeing/disagreeing with the review or adding their own opinion.
+- Extract 3-5 claims from the comments.
+- There should be a total of 10 expressive words in top_words, taken directly from the most common sentiment words in the transcript and comments
+- Extract exactly 5 moods for mood_signals, each scored individually.
+- In sentiment_breakdown, positive_pct, negative_pct, and neutral_pct should all sum to 100.
+"""
+
+VIDEO_PROMPT = """
+You are an expert movie analyst that specializes in intelligence from movie studios and streaming companies. You will be given two JSON
+analysis objects for a single YouTube video: a Transcript Analysis that focuses on what the video creator has said, and a Comments
+Analysis that focuses on how the audience reacted to the video. Your job is to combine these into a single unified report. Do not return
+anything else. Do not include any explanation or text outside of the JSON object. If a field cannot be determined from the provided data, 
+use null.
+
+You must return the following JSON structure exactly:
+
+{
+  "movie": "<name of the specific movie>",
+  "video_type": "<trailer or review>",
+  "key_takeaways": [
+    "<concise insight synthesized from both the video and audience reaction>",
+    ...
+  ],
+  "claims": [
+    {
+      "claim": "<specific factual or opinion statement made by the transcript and comments>",
+      "source": "<transcript or comment>",
+      "sentiment": "<either positive, negative, or mixed>"
+    },
+    ...
+  ],
+  "narratives": [
+    {
+      "title": "<specific narrative or theme>",
+      "summary": "<2-3 sentence description of the narrative emerging from public discourse>",
+      "supporting_claims": ["<claim1>", "<claim2>"],
+      "sentiment": "<either positive, negative, or mixed>"
+    },
+    ...
+  ],
+  "sentiment_breakdown": {
+    "overall_sentiment": "<either positive, negative, or mixed>",
+    "avg_sentiment_score": <number between -1.0 and 1.0>,
+    "positive_pct": <integer from 0-100>,
+    "negative_pct": <integer from 0-100>,
+    "neutral_pct": <integer from 0-100>,
+    "summary": "<1-2 sentences describing the overall tone of the reviewer>"
+  },
+  "top_words": [
+    {
+      "word": "<single impactful word from transcript or comments>",
+      "sentiment": "<either positive, negative, or mixed>"
+    },
+    ...
+  ],
+  "mood_signals": [
+    {
+      "mood": "<single mood like Excitement, Nostalgia, Disappointment, etc>",
+      "percentage": <integer from 0-100>
+    },
+    ...
+  ],
+  "audience_vs_video": {
+    "agreeability": "<either mostly_agrees, mostly_disagrees, mixed>",
+    "video_alignment": "<2-3 sentences describing where the audience aligns with the reviewer's opinion>"
+  },
+  "creator_risk": {
+    "risk_score": <integer from 1-10>,
+    "risk_level": "<either low, moderate, or high>",
+    "summary": "<2-3 sentences about what this reviewer's reception suggests about franchise or content strategy risk>"
+  }
+}
+
+Guidelines:
+- Synthesize both sources, highlighting where the video and audience agree or disagree.
+- Extract 3-6 key takeaways, 4-8 combined claims, and 2-4 narratives.
+- audience_vs_video captures the difference between the video's message and public reaction.
+- There should be a total of 10 expressive words in top_words, taken directly from the most common sentiment words in the transcript and comments
+- Extract exactly 5 moods for mood_signals, each scored individually.
+- In sentiment_breakdown, positive_pct, negative_pct, and neutral_pct should all sum to 100.
 """
 
 AGGREGATION_PROMPT = """
@@ -193,17 +321,28 @@ Guidelines:
 """
 
 # clean up input given by user to make it easier for llm to understand
-def clean_video_input(transcript, comments):
+def clean_comments_input(transcript, comments):
     for c in comments:
         formatter = "\n- "
         cleaned_comments = formatter.join(c)
-
+    
     cleaned_input = f"""
-    VIDEO TRANSCRIPT:
-    {transcript}
+    VIDEO TRANSCRIPT ANALYSIS:
+    {json.dumps(transcript, indent=2)}
 
     VIEWER COMMENTS:
     {cleaned_comments}
+    """
+    
+    return cleaned_input
+
+def clean_video_input(transcript, comments):
+    cleaned_input = f"""
+    TRANSCRIPT ANALYSIS:
+    {json.dumps(transcript, indent=2)}
+
+    COMMENTS ANALYSIS:
+    {json.dumps(comments, indent=2)}
     """
     
     return cleaned_input
@@ -220,22 +359,57 @@ def clean_aggregation_input(trailer_result, review_results):
         
     return cleaned_input
 
-# analyzes a single video (either trailer or review) based on transcript + comments
-def analyze_video(transcript, comments, video_type):
+# analyze transcript only (trailer or review)
+def analyze_transcript(transcript, video_type):
     if video_type == "trailer":
         system_prompt = TRAILER_PROMPT
-    else: 
+    else:
         system_prompt = REVIEW_PROMPT
-        
-    user_input = clean_video_input(transcript, comments)
 
     response = client.chat.completions.create(
-        model="openai/gpt-oss-120b",    # alt: llama-3.1-8b-instant
+        model="openai/gpt-oss-120b",
         messages=[
             {"role": "system", "content": system_prompt},
+            {"role": "user", "content": transcript}
+        ],
+        temperature=0.3,
+        max_completion_tokens=2048,
+        stream=False
+    )
+
+    return response.choices[0].message.content
+
+# analyze comments for a video transcript
+def analyze_comments(transcript, comments):
+    user_input = clean_comments_input(transcript, comments)
+
+    response = client.chat.completions.create(
+        model="openai/gpt-oss-120b",
+        messages=[
+            {"role": "system", "content": COMMENTS_PROMPT},
             {"role": "user", "content": user_input}
         ],
-        temperature=0.4,
+        temperature=0.3,
+        max_completion_tokens=2048,
+        stream=False
+    )
+
+    return response.choices[0].message.content
+
+# analyzes a single video (either trailer or review) based on transcript + comments
+def analyze_video(transcript, comments, video_type):
+    transcript_result = analyze_transcript(transcript, video_type)
+    comments_result = analyze_comments(transcript_result, comments)
+
+    user_input = clean_video_input(transcript_result, comments_result)
+
+    response = client.chat.completions.create(
+        model="openai/gpt-oss-120b",
+        messages=[
+            {"role": "system", "content": VIDEO_PROMPT},
+            {"role": "user", "content": user_input}
+        ],
+        temperature=0.3,
         max_completion_tokens=2048,
         stream=False
     )
@@ -248,7 +422,7 @@ def aggregate_analysis(trailer_result, review_results):
     user_input = clean_aggregation_input(trailer_result, review_results)
 
     response = client.chat.completions.create(
-        model="openai/gpt-oss-120b",    # alt: llama-3.1-8b-instant
+        model="openai/gpt-oss-120b",
         messages=[
             {"role": "system", "content": AGGREGATION_PROMPT},
             {"role": "user", "content": user_input}
@@ -281,67 +455,95 @@ def run_llm(trailer, reviews):
 
     return final_result
 
-
 if __name__ == "__main__":
-    trailer = {
-        "transcript": "The world is changing. The world is changing. God, it seems like a thousand years ago, I fought my way out of that cave, became Iron Man, became Iron Man, realized I loved you. realized I loved you. realized I loved you. I know I said no more surprises, but I was really hoping to pull off one last one. but I was really hoping to pull off one last one. but I was really hoping to pull off one last one. The world has changed. None of us can go back. All we can do is our best. And sometimes the best that we can do... is to start over. I still hold these people to die. I keep telling everybody they should move on Some do And not us Even if there a small chance we owe this to everyone who's not in this room to try. We will. Whatever it takes. Whatever it takes. Whatever it takes. Whatever it takes. I like this one.",
-        "comments": [
-            "Back when Marvel had us by the throat with just a logo and a heartbeat sound. MCU was never the same after Endgame.",
-            "I really miss this movie so much. That time when I watched this movie on theatres with full of people and the crowd went crazy during epic fights.",
-            "THE CHILLS, THE HYPE, THE NOSTALGIA, THE CINEMA AUDIENCE, THIS MOVIE WAS TRULY A ONCE IN A LIFETIME EXPERIENCE."
-        ]
-    }
-
-    reviews = [
-      {
-        "transcript": """Hey everyone, welcome back to the channel.
-Today I want to talk about Avengers: Endgame — not just as a superhero movie, but as one of the most ambitious franchise finales ever attempted.
-
-Coming off the emotional devastation of Infinity War, Endgame opens in a surprisingly quiet place. Instead of jumping straight into spectacle, the movie leans into grief, guilt, and the weight of failure. The surviving Avengers are scattered, emotionally exhausted, and for the first time in this series, genuinely unsure if being heroes is even enough anymore.
-
-That opening tone is one of the film's smartest creative decisions. It immediately tells the audience that this isn't just another team-up movie. This is a story about consequences.
-
-The first act is deliberately slow, and honestly, that's going to divide people. We spend a lot of time watching characters try to move on with their lives. Steve is running support groups. Natasha is barely holding the team together. Thor has completely collapsed under the weight of what he believes is his personal failure. For a blockbuster of this size, it's surprisingly introspective.
-
-But that emotional groundwork is essential, because once the time-heist concept is introduced, the movie becomes something very different.
-
-Rather than trying to top the cosmic scale of the previous film, Endgame turns inward. The plot is basically built around revisiting key moments from earlier movies, and that choice is extremely intentional. This is a celebration of everything the franchise has been building for over a decade. It rewards long-time viewers without fully locking out casual audiences.
-
-What really stands out here is how character-driven the time travel sequences are. Each stop isn't just fan service. It's designed to resolve something emotionally unfinished for the characters involved. Tony confronting his father. Steve finally facing the life he gave up. Thor rediscovering what it actually means to be worthy. These moments carry more narrative weight than the mechanics of time travel itself.
-
-And yes, the time travel rules are messy. The movie doesn't pretend to be hard science fiction. But the emotional logic is consistent, and that matters far more for a story like this.
-
-Robert Downey Jr.'s performance as Tony Stark is easily one of the strongest parts of the film. Tony is no longer the reckless genius trying to prove himself. He's a father now. His motivation isn't saving the universe — it's protecting the small, fragile life he's finally built. That internal conflict gives real stakes to every decision he makes.
-
-Chris Evans also delivers one of his most grounded performances as Steve Rogers. Steve's entire arc has always been about sacrifice. In this film, that idea is finally challenged. Instead of asking what he owes the world, the story asks what he owes himself.
-
-The emotional climax of the movie doesn't come from an explosion or a punch. It comes from a choice.
-
-And then, of course, there's the final battle.
-
-This is pure cinematic spectacle. Portals opening across the battlefield. Heroes arriving from every corner of the franchise. The moment is designed to overwhelm you, and it absolutely succeeds. It's loud, chaotic, and unapologetically celebratory.
-
-But what makes the battle work isn't just how big it is — it's how clearly it reflects the themes of the entire saga. The Avengers don't win because they're stronger. They win because they're finally united again, after years of division, trauma, and loss.
-
-Thanos, as a villain, is slightly less nuanced here than in Infinity War. He's more of a traditional antagonist — focused on domination rather than philosophical justification. But that shift actually fits the story. In this film, the real conflict isn't ideological. It's personal. This is about undoing pain, not debating destiny.
-
-One of the most powerful choices the movie makes is refusing to completely erase what was lost. Even after the snap is reversed, the emotional damage remains. People have lived with grief. Relationships have changed. Time has passed. The movie understands that you can't simply rewind trauma.
-
-Tony's final act is not framed as heroism in the traditional sense. It's framed as acceptance. He finally stops trying to outthink every problem and instead makes the one decision that only he can make. The moment lands because the entire franchise has been quietly building toward it.
-
-Steve's ending, on the other hand, is about something the series rarely allows its heroes: peace. After years of being defined by duty, he chooses a life for himself. It's not flashy, but it's deeply earned.
-
-Ultimately, Avengers: Endgame works because it understands exactly what it is. It is a payoff film — and it embraces that responsibility completely.""",
-        "comments": [
-            "This was actually one of the best breakdowns of Endgame I've heard.",
-            "Hot take but I still think the time travel stuff was way too convenient.",
-            "Thor's arc in this movie is super underrated.",
-            "This feels more like a film analysis than a hype review.",
-            "This honestly feels like how Marvel should've ended things permanently."
-        ]
-      }
+  RUN_ID = "8059e78c-fd04-49a0-b355-cb05cb75a987"
+  MOVIE_ID = "b59fefb2-f37e-49f4-a0b9-1973e82d8490"
+  
+  trailer = {
+    "transcript": "There was an idea. To bring together a group of remarkable people. To see if we could become something more. So when they needed us, we could fight the battles. That they never could. could. In time, you will know what it's like to lose. To feel so desperately that you're right, yet to fail all the same. Dread it. Run from it. Destiny still arrives Evacuate the city. Engage all defenses. And get this man a shield. Fun isn't something one considers when balancing the universe. But this... does put a smile on my face. Who the hell are you guys?",
+    "comments": [
+      "I love this movie, a LOT. But being honest, Infinity War is still the best Avengers movie so far, the best MCU movie, is Winter Soldier.",
+      "I wonder if the Doomsday trailer would match the level of infinity war...",
+      "The fact that they showed Thanos actually winning in the trailer told me this was going to be different.",
+      "I've never felt dread watching a Marvel trailer before. This one actually scared me.",
+      "Thanos throwing a moon at Iron Man is the most unhinged thing I've ever seen in a superhero movie.",
+      "The shot of all the heroes in Wakanda gave me chills I still haven't recovered from.",
+      "Marvel really said let's make the villain the main character and it worked perfectly.",
+      "This trailer made me realize how long we've been waiting for this moment.",
+      "The Children of Thanos look terrifying. Finally some real threats in this universe.",
+      "I watched this trailer like 30 times the day it dropped.",
+      "The music choice here is so different from every other Marvel trailer. It feels massive.",
+      "Tony's face when he realizes how outmatched they are is the best acting in any Marvel trailer.",
+      "We really thought they were all going to make it out okay. We were so naive.",
+      "The way they hid so much of the actual plot and still made it the most hyped movie ever is insane.",
+      "Cap showing up in Wakanda with a beard after two years felt like seeing an old friend.",
+      "Thanos actually feeling like a real character in this trailer and not just a CGI villain was unexpected.",
+      "This is the trailer that made me go back and rewatch every single Marvel movie before release."
     ]
+  }
 
-    result = run_llm(trailer, reviews)
-    print("Final Aggregated Analysis:")
-    print(result)
+  reviews = [
+      {
+      "transcript": """Hey everyone, welcome back to the channel.
+
+  Today we're talking about Avengers: Infinity War, and I want to be upfront — I've seen this movie twice now, and I still don't fully know how to process it.
+
+  Let me start with what makes this film unlike anything Marvel has done before. This is not an Avengers movie in the traditional sense. This is a Thanos movie. He is the protagonist. He has the clearest arc, the most screen time, and the most compelling motivation of anyone in the film. That is an extraordinary creative decision for a franchise that has spent ten years building toward this moment, and it almost entirely pays off.
+
+  Josh Brolin's performance as Thanos is the backbone of this entire film. What could have been a generic world-ending villain is instead a character who genuinely believes he is saving the universe. His logic is flawed and horrifying, but it is internally consistent. When he talks about balance and sacrifice, you understand where he's coming from even as you completely reject it. That moral complexity is rare in blockbuster filmmaking.
+
+  The film's structure is genuinely unusual. Rather than building toward a climax where the heroes win, Infinity War spends its entire runtime dismantling them. Every time the Avengers get close to stopping Thanos, something goes wrong. Someone makes an emotional decision over a tactical one. And the movie never punishes those decisions in a cheap way — it treats them as tragic but human.
+
+  The Guardians of the Galaxy integration is one of the best things about this film. Putting Thor with the Guardians is comedic genius, but it also gives Thor some of his best character work in the entire franchise. His grief over Asgard, over his brother, over everything he's lost — it gives the humor real weight.
+
+  Wakanda as the setting for the final battle was a smart choice. It grounds the cosmic scale of the conflict in something tactile and real. The battle itself is spectacular, though I'll admit it sometimes becomes difficult to track amid so many characters and so much action.
+
+  Doctor Strange's decision to give up the Time Stone is the scene I keep coming back to. He tells Tony it was the only way, and in the moment it feels like a betrayal. But knowing what comes next, it reframes everything. That single line carries the entire weight of the sequel on its back.
+
+  And then there's the ending.
+
+  I don't think any mainstream blockbuster has ever ended the way Infinity War ends. Heroes turning to dust one by one. No reversal. No last minute save. Just loss. The theater I was in was completely silent for the entire credits sequence. People didn't know how to react because nothing had prepared them for a Marvel movie to end with the villain winning.
+
+  Spider-Man's scene is devastating in a way that still gets me. Unlike the others who simply fade, he's scared. He knows what's happening and he doesn't want to go. It's the most human moment in the film.
+
+  My criticisms are few but worth noting. Some of the smaller character groupings feel rushed — there are so many moving parts that certain storylines don't get the breathing room they deserve. The film also leans heavily on prior knowledge of all the characters, which is part of the design but can make it feel dense to anyone who hasn't kept up.
+
+  But those are minor complaints against something genuinely ambitious. Infinity War is a film that trusts its audience to handle darkness and ambiguity. It doesn't reassure you that everything will be okay. It sits with failure, grief, and consequence in a way that superhero films almost never do.
+
+  It's not a complete story — it was never designed to be. But as the first half of something much larger, it is one of the most confident and emotionally devastating blockbusters ever made.
+
+  Thanks for watching. Let me know in the comments whether you think Thanos was right.""",
+
+      "comments": [
+          "The silence in my theater after the snap was the most surreal movie experience I've ever had.",
+          "Thanos is genuinely one of the best written villains in any superhero movie ever made.",
+          "You're right that this is basically a Thanos movie and I think that's exactly why it works.",
+          "Spider-Man's scene destroyed me. I was not prepared for that at all.",
+          "The Doctor Strange line at the end recontextualized the entire movie for me on rewatch.",
+          "I think the Wakanda battle is slightly overlong but everything before it is perfect.",
+          "Thor's arc in this movie is massively underappreciated. He loses everything and still shows up.",
+          "The fact that the villain actually wins is still something I don't think Marvel will ever top.",
+          "Gamora's death hit harder than most of the snap deaths for me. That scene was brutal.",
+          "I disagree that some storylines felt rushed — I thought the pacing was actually impressive given how many characters are in this.",
+          "The Guardians and Thor scenes are so funny but then you remember what's at stake and it hits different.",
+          "Best MCU movie for me personally. Nothing else comes close to what this film was willing to do.",
+          "Strange giving up the stone felt like a betrayal the first time. Second viewing completely changed how I saw it.",
+          "The ending still makes me angry in the best way possible. They really just let the villain win.",
+          "This review nailed the Thanos analysis. Most people reduce him to just a big purple guy but he's way more than that."
+      ]
+    }
+  ]
+
+  raw_result = run_llm(trailer, reviews)
+  print("Final Aggregated Analysis:")
+  print(raw_result)
+
+  try:
+      result = json.loads(raw_result)
+  except json.JSONDecodeError:
+      print("LLM did not return valid JSON:")
+      print(raw_result)
+      exit(1)
+
+  print("Saving to DB")
+  load_llm_output(RUN_ID, MOVIE_ID, result)
