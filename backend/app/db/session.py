@@ -7,7 +7,7 @@ from sqlalchemy.orm import sessionmaker
 load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")
-
+# making this comment to test new deployment and check if CI still works
 engine = create_engine(DATABASE_URL, future=True) if DATABASE_URL else None
 
 SessionLocal = (
