@@ -3,10 +3,80 @@
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Mail, Lock, Eye, EyeOff, ArrowRight } from "lucide-react";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { getFirebaseAuth } from "@/lib/firebase";
+
 
 export default function StudioAuthScreen() {
   const router = useRouter();
   const [showPw, setShowPw] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function handleLogin(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+
+    try {
+      const auth = getFirebaseAuth();
+
+      if (!auth) {
+        setError("Firebase not initialized. Try refreshing.");
+        setLoading(false);
+        return;
+      }
+
+      const cred = await signInWithEmailAndPassword(auth, email, password);
+      const token = await cred.user.getIdToken();
+
+      const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/user-login-check`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.ok) {
+        if (res.status === 404) {
+          setError("User not found in database.");
+        } else if (res.status === 403) {
+          setError("You are not an admin.");
+        } else if (res.status === 401) {
+          setError("Unauthorized. Please log in again.");
+        } else {
+          setError(data.detail || "Admin login failed.");
+        }
+        return;
+      }
+
+      router.push("../studio/dashboard_temp");
+    } catch (err: any) {
+      console.error(err);
+      switch (err.code) {
+        case "auth/invalid-credential":
+        case "auth/wrong-password":
+        case "auth/user-not-found":
+        case "auth/invalid-email":
+          setError("Invalid email or password.");
+          break;
+        case "auth/too-many-requests":
+          setError("Too many failed attempts. Please try again later.");
+          break;
+        case "auth/network-request-failed":
+          setError("Network error. Check your internet connection.");
+          break;
+        default:
+          setError(err.message || "Login failed.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <div className="min-h-screen w-screen bg-black">
@@ -65,14 +135,18 @@ export default function StudioAuthScreen() {
                   Sign in to your studio account to continue.
                 </p>
 
-                <div className="mt-8 space-y-4">
+                <form onSubmit={handleLogin} className="mt-8 space-y-4">
+                
                   {/* email entry */}
                   <div className="relative">
                     <Mail className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
                     <input
                       type="email"
                       placeholder="Work email address"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
                       className="w-full rounded-2xl border border-white/10 bg-white/5 px-11 py-3.5 text-sm text-white placeholder:text-white/30 outline-none shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] focus:border-white/20"
+                      required
                     />
                   </div>
 
@@ -82,7 +156,10 @@ export default function StudioAuthScreen() {
                     <input
                       type={showPw ? "text" : "password"}
                       placeholder="Password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
                       className="w-full rounded-2xl border border-white/10 bg-white/5 px-11 py-3.5 pr-12 text-sm text-white placeholder:text-white/30 outline-none shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] focus:border-white/20"
+                      required
                     />
                     <button
                       type="button"
@@ -100,21 +177,29 @@ export default function StudioAuthScreen() {
                     </button>
                   </div>
 
+                  {error && (
+                    <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                      {error}
+                    </div>
+                  )}
                   
                   <button
-                    onClick={() => router.push("/dashboard")}
-                    className="group mt-2 w-full rounded-2xl bg-[#E23333] py-4 text-sm font-semibold text-white shadow-[0_18px_40px_rgba(226,51,51,0.25)] transition hover:brightness-105"
+                    type="submit"
+                    disabled={loading}
+                    className="cursor-pointer group mt-2 w-full rounded-2xl bg-[#E23333] py-4 text-sm font-semibold text-white shadow-[0_18px_40px_rgba(226,51,51,0.25)] transition hover:brightness-105 disabled:opacity-60"
                   >
                     <span className="inline-flex items-center justify-center gap-2">
-                      Sign In to Studio
-                      <ArrowRight className="h-4 w-4 transition group-hover:translate-x-0.5" />
+                      {loading ? "Signing In..." : "Sign In to Studio"}
+                      {!loading && (
+                        <ArrowRight className="h-4 w-4 transition group-hover:translate-x-0.5" />
+                      )}
                     </span>
                   </button>
 
                   <p className="pt-4 text-center text-xs text-white/35">
                     Access is invite-only. Contact your admin if you need access.
                   </p>
-                </div>
+                </form>
               </div>
             </div>
           </div>
