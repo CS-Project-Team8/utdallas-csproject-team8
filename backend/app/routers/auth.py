@@ -32,3 +32,27 @@ async def admin_login_check(current_user=Depends(get_current_user)):
         "studioId": membership_data.get("studioId"),
         "role": membership_data.get("role"),
     }
+    
+    
+@router.post("/user-login-check")
+async def user_login_check(current_user=Depends(get_current_user)):
+    uid = current_user["uid"]
+
+    memberships = (
+        db.collection("studio_memberships")
+        .where("firebaseUid", "==", uid)
+        .where("status", "==", "active")
+        .limit(1)
+        .stream()
+    )
+
+    membership_docs = list(memberships)
+    membership_data = membership_docs[0].to_dict()
+
+    return {
+        "ok": True,
+        "uid": uid,
+        "email": current_user.get("email"),
+        "studioId": membership_data.get("studioId"),
+        "role": membership_data.get("role"),
+    }
