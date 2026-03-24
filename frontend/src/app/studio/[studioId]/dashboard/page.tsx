@@ -1,5 +1,5 @@
 "use client";
-
+import { useParams } from "next/navigation";
 import React, { useMemo, useState, useEffect } from "react";
 import {
   Search,
@@ -84,7 +84,8 @@ export default function StudioDashboard() {
   const [loadingSearch, setLoadingSearch] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const studioId = "11111111-1111-1111-1111-111111111111";
+  const params = useParams();
+  const studioId = params.studioId as string;
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
 
   const [query, setQuery] = useState("");
@@ -114,16 +115,21 @@ export default function StudioDashboard() {
       }
     };
 
-    if (apiBaseUrl) {
-      loadDashboard();
-    } else {
+    if (!apiBaseUrl) {
       setError("Missing NEXT_PUBLIC_API_BASE_URL");
       setLoadingDashboard(false);
+      return;
     }
+
+    if (!studioId) {
+      return;
+    }
+
+    loadDashboard();
   }, [apiBaseUrl, studioId]);
 
   useEffect(() => {
-    if (!apiBaseUrl) return;
+    if (!apiBaseUrl || !studioId) return;
 
     const timeout = setTimeout(async () => {
       try {
