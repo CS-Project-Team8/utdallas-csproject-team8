@@ -54,7 +54,7 @@ export default function StudioAuthScreen() {
         return;
       }
 
-      router.push("../studio/dashboard_temp");
+      router.push(`/studio/${data.studioId}/dashboard`);
     } catch (err: any) {
       console.error(err);
       switch (err.code) {
