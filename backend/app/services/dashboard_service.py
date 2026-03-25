@@ -40,82 +40,82 @@ def engagement_label(total_views, total_likes):
 
 def get_studio_dashboard(db, studio_id: str):
     studio_sql = text("""
-                      SELECT
-                          s.studioId,
-                          s.name,
-                          s.brandAccent,
-                          s.initials,
-                          s.logoTextLeft,
-                          s.logoTextRight
-                      FROM studios s
-                      WHERE s.studioId = :studio_id
-                      """)
+        SELECT
+            s.studioid,
+            s.name,
+            s."brandAccent",
+            s.initials,
+            s."logoTextLeft",
+            s."logoTextRight"
+        FROM studios s
+        WHERE s.studioid = :studio_id
+    """)
 
     metrics_sql = text("""
-                       WITH latest_snapshots AS (
-                           SELECT DISTINCT ON (mas.movieId)
-                           mas.movieId,
-                           mas.computedAt,
-                           mas.totalViews,
-                           mas.totalLikes,
-                           mas.creatorRiskScore
-                       FROM movieanalyticssnapshots mas
-                       ORDER BY mas.movieId, mas.computedAt DESC
-                           )
-                       SELECT
-                           COUNT(m.movieId) AS total_movies,
-                           COALESCE(ROUND(AVG(m.rating)::numeric, 1), 0) AS avg_rating,
-                           COALESCE(ROUND(AVG(ls.creatorRiskScore)::numeric, 1), 0) AS creator_risk_score,
-                           COALESCE(SUM(ls.totalViews), 0) AS total_views
-                       FROM movies m
-                                LEFT JOIN latest_snapshots ls
-                                          ON ls.movieId = m.movieId
-                       WHERE m.studioId = :studio_id
-                         AND m.status = 'active'
-                       """)
+        WITH latest_snapshots AS (
+            SELECT DISTINCT ON (mas.movieid)
+                mas.movieid,
+                mas.computedat,
+                mas.totalviews,
+                mas.totallikes,
+                mas.creatorriskscore
+            FROM movieanalyticssnapshots mas
+            ORDER BY mas.movieid, mas.computedat DESC
+        )
+        SELECT
+            COUNT(m.movieid) AS total_movies,
+            COALESCE(ROUND(AVG(m.rating)::numeric, 1), 0) AS avg_rating,
+            COALESCE(ROUND(AVG(ls.creatorriskscore)::numeric, 1), 0) AS creator_risk_score,
+            COALESCE(SUM(ls.totalviews), 0) AS total_views
+        FROM movies m
+        LEFT JOIN latest_snapshots ls
+            ON ls.movieid = m.movieid
+        WHERE m.studioid = :studio_id
+          AND m.status = 'active'
+    """)
 
     movies_sql = text("""
-                      WITH latest_snapshots AS (
-                          SELECT DISTINCT ON (mas.movieId)
-                          mas.movieId,
-                          mas.computedAt,
-                          mas.averageSentiment,
-                          mas.totalViews,
-                          mas.totalLikes
-                      FROM movieanalyticssnapshots mas
-                      ORDER BY mas.movieId, mas.computedAt DESC
-                          ),
-                          latest_success_run AS (
-                      SELECT ir.runId
-                      FROM insightRuns ir
-                      WHERE ir.studioId = :studio_id
-                        AND ir.status = 'success'
-                      ORDER BY ir.finishedAt DESC NULLS LAST, ir.startedAt DESC
-                          LIMIT 1
-                          )
-                      SELECT
-                          m.movieId,
-                          m.title,
-                          m.releaseDate,
-                          m.posterUrl,
-                          mi.summary,
-                          ls.averageSentiment,
-                          ls.totalViews,
-                          ls.totalLikes,
-                          stm.rank
-                      FROM studioTopMovies stm
-                               JOIN movies m
-                                    ON m.movieId = stm.movieId
-                               LEFT JOIN latest_snapshots ls
-                                         ON ls.movieId = m.movieId
-                               LEFT JOIN latest_success_run lsr
-                                         ON TRUE
-                               LEFT JOIN movieInsights mi
-                                         ON mi.movieId = m.movieId
-                                             AND mi.runId = lsr.runId
-                      WHERE stm.studioId = :studio_id
-                      ORDER BY stm.rank ASC
-                      """)
+        WITH latest_snapshots AS (
+            SELECT DISTINCT ON (mas.movieid)
+                mas.movieid,
+                mas.computedat,
+                mas.averagesentiment,
+                mas.totalviews,
+                mas.totallikes
+            FROM movieanalyticssnapshots mas
+            ORDER BY mas.movieid, mas.computedat DESC
+        ),
+        latest_success_run AS (
+            SELECT ir.runid
+            FROM insightruns ir
+            WHERE ir.studioid = :studio_id
+              AND ir.status = 'success'
+            ORDER BY ir.finishedat DESC NULLS LAST, ir.startedat DESC
+            LIMIT 1
+        )
+        SELECT
+            m.movieid,
+            m.title,
+            m.releasedate,
+            m."posterUrl",
+            mi.summary,
+            ls.averagesentiment,
+            ls.totalviews,
+            ls.totallikes,
+            stm.rank
+        FROM studiotopmovies stm
+        JOIN movies m
+            ON m.movieid = stm.movieid
+        LEFT JOIN latest_snapshots ls
+            ON ls.movieid = m.movieid
+        LEFT JOIN latest_success_run lsr
+            ON TRUE
+        LEFT JOIN movieinsights mi
+            ON mi.movieid = m.movieid
+           AND mi.runid = lsr.runid
+        WHERE stm.studioid = :studio_id
+        ORDER BY stm.rank ASC
+    """)
 
     studio = db.execute(studio_sql, {"studio_id": studio_id}).mappings().first()
     if not studio:
@@ -132,10 +132,10 @@ def get_studio_dashboard(db, studio_id: str):
         "studio": {
             "id": str(studio["studioid"]),
             "name": studio["name"],
-            "brandAccent": studio["brandaccent"] or "#E23333",
+            "brandAccent": studio["brandAccent"] or "#E23333",
             "initials": initials,
-            "logoTextLeft": studio["logotextleft"],
-            "logoTextRight": studio["logotextright"],
+            "logoTextLeft": studio["logoTextLeft"],
+            "logoTextRight": studio["logoTextRight"],
         },
         "metrics": {
             "totalMovies": metrics["total_movies"] or 0,
@@ -149,7 +149,7 @@ def get_studio_dashboard(db, studio_id: str):
                 "id": str(row["movieid"]),
                 "title": row["title"],
                 "year": row["releasedate"].year if row["releasedate"] else None,
-                "posterUrl": row["posterurl"],
+                "posterUrl": row["posterUrl"],
                 "summary": row["summary"],
                 "sentimentLabel": sentiment_label(row["averagesentiment"]),
                 "engagementLabel": engagement_label(row["totalviews"], row["totallikes"]),
@@ -158,49 +158,50 @@ def get_studio_dashboard(db, studio_id: str):
         ],
     }
 
+
 def get_dashboard_movies(db, studio_id: str):
     movies_sql = text("""
-                      WITH latest_snapshots AS (
-                          SELECT DISTINCT ON (mas.movieId)
-                          mas.movieId,
-                          mas.computedAt,
-                          mas.averageSentiment,
-                          mas.totalViews,
-                          mas.totalLikes
-                      FROM movieanalyticssnapshots mas
-                      ORDER BY mas.movieId, mas.computedAt DESC
-                          ),
-                          latest_success_run AS (
-                      SELECT ir.runId
-                      FROM insightRuns ir
-                      WHERE ir.studioId = :studio_id
-                        AND ir.status = 'success'
-                      ORDER BY ir.finishedAt DESC NULLS LAST, ir.startedAt DESC
-                          LIMIT 1
-                          )
-                      SELECT
-                          m.movieId,
-                          m.title,
-                          m.releaseDate,
-                          m.posterUrl,
-                          mi.summary,
-                          ls.averageSentiment,
-                          ls.totalViews,
-                          ls.totalLikes,
-                          stm.rank
-                      FROM studioTopMovies stm
-                               JOIN movies m
-                                    ON m.movieId = stm.movieId
-                               LEFT JOIN latest_snapshots ls
-                                         ON ls.movieId = m.movieId
-                               LEFT JOIN latest_success_run lsr
-                                         ON TRUE
-                               LEFT JOIN movieInsights mi
-                                         ON mi.movieId = m.movieId
-                                             AND mi.runId = lsr.runId
-                      WHERE stm.studioId = :studio_id
-                      ORDER BY stm.rank ASC
-                      """)
+        WITH latest_snapshots AS (
+            SELECT DISTINCT ON (mas.movieid)
+                mas.movieid,
+                mas.computedat,
+                mas.averagesentiment,
+                mas.totalviews,
+                mas.totallikes
+            FROM movieanalyticssnapshots mas
+            ORDER BY mas.movieid, mas.computedat DESC
+        ),
+        latest_success_run AS (
+            SELECT ir.runid
+            FROM insightruns ir
+            WHERE ir.studioid = :studio_id
+              AND ir.status = 'success'
+            ORDER BY ir.finishedat DESC NULLS LAST, ir.startedat DESC
+            LIMIT 1
+        )
+        SELECT
+            m.movieid,
+            m.title,
+            m.releasedate,
+            m."posterUrl",
+            mi.summary,
+            ls.averagesentiment,
+            ls.totalviews,
+            ls.totallikes,
+            stm.rank
+        FROM studiotopmovies stm
+        JOIN movies m
+            ON m.movieid = stm.movieid
+        LEFT JOIN latest_snapshots ls
+            ON ls.movieid = m.movieid
+        LEFT JOIN latest_success_run lsr
+            ON TRUE
+        LEFT JOIN movieinsights mi
+            ON mi.movieid = m.movieid
+           AND mi.runid = lsr.runid
+        WHERE stm.studioid = :studio_id
+        ORDER BY stm.rank ASC
+    """)
 
     rows = db.execute(movies_sql, {"studio_id": studio_id}).mappings().all()
 
@@ -209,7 +210,7 @@ def get_dashboard_movies(db, studio_id: str):
             "id": str(row["movieid"]),
             "title": row["title"],
             "year": row["releasedate"].year if row["releasedate"] else None,
-            "posterUrl": row["posterurl"],
+            "posterUrl": row["posterUrl"],
             "summary": row["summary"],
             "sentimentLabel": sentiment_label(row["averagesentiment"]),
             "engagementLabel": engagement_label(row["totalviews"], row["totallikes"]),
@@ -217,52 +218,53 @@ def get_dashboard_movies(db, studio_id: str):
         for row in rows
     ]
 
+
 def search_studio_movies(db, studio_id: str, query: str = "", limit: int = 12):
     search_sql = text("""
-                      WITH latest_snapshots AS (
-                          SELECT DISTINCT ON (mas.movieId)
-                          mas.movieId,
-                          mas.computedAt,
-                          mas.averageSentiment,
-                          mas.totalViews,
-                          mas.totalLikes
-                      FROM movieanalyticssnapshots mas
-                      ORDER BY mas.movieId, mas.computedAt DESC
-                          ),
-                          latest_success_run AS (
-                      SELECT ir.runId
-                      FROM insightRuns ir
-                      WHERE ir.studioId = :studio_id
-                        AND ir.status = 'success'
-                      ORDER BY ir.finishedAt DESC NULLS LAST, ir.startedAt DESC
-                          LIMIT 1
-                          )
-                      SELECT
-                          m.movieId,
-                          m.title,
-                          m.releaseDate,
-                          m.posterUrl,
-                          mi.summary,
-                          ls.averageSentiment,
-                          ls.totalViews,
-                          ls.totalLikes
-                      FROM movies m
-                               LEFT JOIN latest_snapshots ls
-                                         ON ls.movieId = m.movieId
-                               LEFT JOIN latest_success_run lsr
-                                         ON TRUE
-                               LEFT JOIN movieInsights mi
-                                         ON mi.movieId = m.movieId
-                                             AND mi.runId = lsr.runId
-                      WHERE m.studioId = :studio_id
-                        AND m.status = 'active'
-                        AND (
-                          :query = ''
-                              OR LOWER(m.title) LIKE LOWER(:like_query)
-                          )
-                      ORDER BY m.releaseDate DESC NULLS LAST, m.createdAt DESC
-                          LIMIT :limit
-                      """)
+        WITH latest_snapshots AS (
+            SELECT DISTINCT ON (mas.movieid)
+                mas.movieid,
+                mas.computedat,
+                mas.averagesentiment,
+                mas.totalviews,
+                mas.totallikes
+            FROM movieanalyticssnapshots mas
+            ORDER BY mas.movieid, mas.computedat DESC
+        ),
+        latest_success_run AS (
+            SELECT ir.runid
+            FROM insightruns ir
+            WHERE ir.studioid = :studio_id
+              AND ir.status = 'success'
+            ORDER BY ir.finishedat DESC NULLS LAST, ir.startedat DESC
+            LIMIT 1
+        )
+        SELECT
+            m.movieid,
+            m.title,
+            m.releasedate,
+            m."posterUrl",
+            mi.summary,
+            ls.averagesentiment,
+            ls.totalviews,
+            ls.totallikes
+        FROM movies m
+        LEFT JOIN latest_snapshots ls
+            ON ls.movieid = m.movieid
+        LEFT JOIN latest_success_run lsr
+            ON TRUE
+        LEFT JOIN movieinsights mi
+            ON mi.movieid = m.movieid
+           AND mi.runid = lsr.runid
+        WHERE m.studioid = :studio_id
+          AND m.status = 'active'
+          AND (
+              :query = ''
+              OR LOWER(m.title) LIKE LOWER(:like_query)
+          )
+        ORDER BY m.releasedate DESC NULLS LAST, m.createdat DESC
+        LIMIT :limit
+    """)
 
     rows = db.execute(
         search_sql,
@@ -279,7 +281,7 @@ def search_studio_movies(db, studio_id: str, query: str = "", limit: int = 12):
             "id": str(row["movieid"]),
             "title": row["title"],
             "year": row["releasedate"].year if row["releasedate"] else None,
-            "posterUrl": row["posterurl"],
+            "posterUrl": row["posterUrl"],
             "summary": row["summary"],
             "sentimentLabel": sentiment_label(row["averagesentiment"]),
             "engagementLabel": engagement_label(row["totalviews"], row["totallikes"]),
