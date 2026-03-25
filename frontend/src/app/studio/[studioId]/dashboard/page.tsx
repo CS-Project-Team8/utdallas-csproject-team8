@@ -1,4 +1,6 @@
 "use client";
+
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import React, { useMemo, useState, useEffect } from "react";
 import {
@@ -10,11 +12,6 @@ import {
   TrendingUp,
   ThumbsUp,
 } from "lucide-react";
-
-/** notes to self: 
- * wire it later:
- * - Replace `mockStudio`, `mockMetrics`, `mockRecentMovies` with real API data.
- */
 
 type Studio = {
   id: string;
@@ -35,10 +32,25 @@ type Metrics = {
 };
 
 type Movie = {
-  id: string;
+  movieid: string;
+  studioid?: string;
   title: string;
   year?: number;
-  posterUrl?: string;
+  posterUrl?: string | null;
+  summary?: string;
+  sentimentLabel?: string;
+  engagementLabel?: string;
+};
+
+type RawMovie = {
+  movieid?: string;
+  movieId?: string;
+  id?: string;
+  studioid?: string;
+  studioId?: string;
+  title?: string;
+  year?: number;
+  posterUrl?: string | null;
   summary?: string;
   sentimentLabel?: string;
   engagementLabel?: string;
@@ -47,35 +59,77 @@ type Movie = {
 type DashboardResponse = {
   studio: Studio;
   metrics: Metrics;
-  recentMovies: Movie[];
+  recentMovies: RawMovie[];
 };
 
+function normalizeMovie(raw: RawMovie, fallbackStudioId?: string): Movie | null {
+  const movieid = raw.movieid ?? raw.movieId ?? raw.id;
+  const title = raw.title?.trim();
+
+  if (!movieid || !title) {
+    return null;
+  }
+
+  return {
+    movieid,
+    studioid: raw.studioid ?? raw.studioId ?? fallbackStudioId,
+    title,
+    year: raw.year,
+    posterUrl: raw.posterUrl ?? null,
+    summary: raw.summary,
+    sentimentLabel: raw.sentimentLabel,
+    engagementLabel: raw.engagementLabel,
+  };
+}
+
 export default function StudioDashboard() {
-  
+  const params = useParams();
+  const studioId = params?.studioId as string;
+  const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000";
+
   const mockStudio: Studio = {
-    id: "studio_1",
-    name: "Marvel Studios",
-    brandAccent: "#E23333",
-    initials: "AS",
-    logoTextLeft: "MARVEL",
-    logoTextRight: "STUDIOS",
+    id: "b1fe663f-b0e7-46fd-acf5-53056959f268",
+    name: "Netflix",
+    brandAccent: "#E50914",
+    initials: "NF",
+    logoTextLeft: "NET",
+    logoTextRight: "FLIX",
   };
 
   const mockMetrics: Metrics = {
-    totalMovies: 34,
-    avgRating: 7.8,
-    creatorRiskScore: 23,
-    profit: 12500000, 
-    extraLabel: "Something else here?",
+    totalMovies: 5,
+    avgRating: 8.2,
+    creatorRiskScore: 0,
+    extraLabel: "Total Views",
     extraValue: 0,
   };
 
-  const mockRecentMovies: Movie[] = [
-    { id: "m1", title: "Movie 1" },
-    { id: "m2", title: "Movie 2" },
-    { id: "m3", title: "Movie 3" },
-    { id: "m4", title: "Movie 4" },
-    { id: "m5", title: "Movie 5" },
+  const mockRecentMovies: RawMovie[] = [
+    {
+      movieid: "31658c27-5b3b-40b6-8cc6-3c43021015d2",
+      studioid: "b1fe663f-b0e7-46fd-acf5-53056959f268",
+      title: "The Death of Robin Hood",
+    },
+    {
+      movieid: "39a1b1bd-42e0-46b9-bcb6-82d206476fd1",
+      studioid: "b1fe663f-b0e7-46fd-acf5-53056959f268",
+      title: "Backrooms",
+    },
+    {
+      movieid: "73b48d67-3409-4f2d-b2fa-76f741a96964",
+      studioid: "b1fe663f-b0e7-46fd-acf5-53056959f268",
+      title: "The Drama",
+    },
+    {
+      movieid: "892be090-602a-4783-b1b1-a8656841f9e9",
+      studioid: "b1fe663f-b0e7-46fd-acf5-53056959f268",
+      title: "Pillion",
+    },
+    {
+      movieid: "97bf4271-9e8b-4eef-8b5a-ae7f9801570e",
+      studioid: "b1fe663f-b0e7-46fd-acf5-53056959f268",
+      title: "undertone",
+    },
   ];
 
   const [dashboardData, setDashboardData] = useState<DashboardResponse | null>(null);
@@ -83,11 +137,6 @@ export default function StudioDashboard() {
   const [loadingDashboard, setLoadingDashboard] = useState(true);
   const [loadingSearch, setLoadingSearch] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const params = useParams();
-  const studioId = params.studioId as string;
-  const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
-
   const [query, setQuery] = useState("");
 
   useEffect(() => {
@@ -96,10 +145,9 @@ export default function StudioDashboard() {
         setLoadingDashboard(true);
         setError(null);
 
-        const res = await fetch(
-            `${apiBaseUrl}/api/v1/studios/${studioId}`,
-            { cache: "no-store" }
-        );
+        const res = await fetch(`${apiBaseUrl}/api/v1/studios/${studioId}`, {
+          cache: "no-store",
+        });
 
         if (!res.ok) {
           throw new Error(`Failed to load dashboard: ${res.status}`);
@@ -115,16 +163,7 @@ export default function StudioDashboard() {
       }
     };
 
-    if (!apiBaseUrl) {
-      setError("Missing NEXT_PUBLIC_API_BASE_URL");
-      setLoadingDashboard(false);
-      return;
-    }
-
-    if (!studioId) {
-      return;
-    }
-
+    if (!studioId) return;
     loadDashboard();
   }, [apiBaseUrl, studioId]);
 
@@ -132,20 +171,32 @@ export default function StudioDashboard() {
     if (!apiBaseUrl || !studioId) return;
 
     const timeout = setTimeout(async () => {
+      if (!query.trim()) {
+        setMovieResults(null);
+        setLoadingSearch(false);
+        return;
+      }
+
       try {
         setLoadingSearch(true);
 
         const res = await fetch(
-            `${apiBaseUrl}/api/v1/studios/${studioId}/movies/search?query=${encodeURIComponent(query)}&limit=12`,
-            { cache: "no-store" }
+          `${apiBaseUrl}/api/v1/studios/${studioId}/movies/search?query=${encodeURIComponent(
+            query
+          )}&limit=12`,
+          { cache: "no-store" }
         );
 
         if (!res.ok) {
           throw new Error(`Search failed: ${res.status}`);
         }
 
-        const data: Movie[] = await res.json();
-        setMovieResults(data);
+        const data: RawMovie[] = await res.json();
+        const normalized = data
+          .map((movie) => normalizeMovie(movie, studioId))
+          .filter((movie): movie is Movie => movie !== null);
+
+        setMovieResults(normalized);
       } catch (err) {
         console.error(err);
         setMovieResults(null);
@@ -159,55 +210,66 @@ export default function StudioDashboard() {
 
   const studio = dashboardData?.studio ?? mockStudio;
   const metrics = dashboardData?.metrics ?? mockMetrics;
-  const fallbackMovies = dashboardData?.recentMovies ?? mockRecentMovies;
 
-  const displayedMovies =
-      query.trim().length > 0
-          ? movieResults ?? []
-          : fallbackMovies;
+  const fallbackMovies = useMemo(
+    () =>
+      (dashboardData?.recentMovies ?? mockRecentMovies)
+        .map((movie) => normalizeMovie(movie, studioId))
+        .filter((movie): movie is Movie => movie !== null),
+    [dashboardData?.recentMovies, studioId]
+  );
 
+  const displayedMovies = query.trim().length > 0 ? movieResults ?? [] : fallbackMovies;
   const accent = studio.brandAccent;
 
   const kpis = useMemo(
-      () => [
-        {
-          label: "Total Movies",
-          value: metrics.totalMovies,
-          Icon: Film,
-        },
-        {
-          label: "Avg rating",
-          value: metrics.avgRating,
-          Icon: Star,
-        },
-        {
-          label: "Creator risk score",
-          value: metrics.creatorRiskScore,
-          Icon: TrendingUp,
-        },
-        {
-          label: metrics.extraLabel ?? "Profit",
-          value:
-              metrics.extraLabel && metrics.extraValue !== undefined
-                  ? metrics.extraValue
-                  : metrics.profit !== undefined
-                      ? `$${formatCompact(metrics.profit)}`
-                      : "—",
-          Icon: ThumbsUp,
-        },
-      ],
-      [metrics]
+    () => [
+      {
+        label: "Total Movies",
+        value: metrics.totalMovies,
+        Icon: Film,
+      },
+      {
+        label: "Avg rating",
+        value: metrics.avgRating,
+        Icon: Star,
+      },
+      {
+        label: "Creator risk score",
+        value: metrics.creatorRiskScore,
+        Icon: TrendingUp,
+      },
+      {
+        label: metrics.extraLabel ?? "Profit",
+        value:
+          metrics.extraLabel && metrics.extraValue !== undefined
+            ? metrics.extraValue
+            : metrics.profit !== undefined
+            ? `$${formatCompact(metrics.profit)}`
+            : "—",
+        Icon: ThumbsUp,
+      },
+    ],
+    [metrics]
   );
 
+  const movieBlocks = useMemo(() => {
+    const seen = new Set<string>();
 
-  const movieBlocks = useMemo(() => displayedMovies.slice(0, 5), [displayedMovies]);
+    return displayedMovies
+      .filter((movie) => {
+        if (!movie.movieid) return false;
+        if (seen.has(movie.movieid)) return false;
+        seen.add(movie.movieid);
+        return true;
+      })
+      .slice(0, 12);
+  }, [displayedMovies]);
 
   return (
     <div className="h-screen w-screen bg-[#0B0B0B] text-white">
-     
       <div className="h-full">
         <div className="relative h-full w-full overflow-hidden bg-black shadow-[0_30px_120px_rgba(0,0,0,0.65)] ring-1 ring-white/10">
-         
           <div
             aria-hidden
             className="pointer-events-none absolute inset-0 opacity-80"
@@ -221,14 +283,10 @@ export default function StudioDashboard() {
             }}
           />
 
-          {/* content */}
           <div className="relative flex h-full flex-col">
-           
             <header className="flex items-center justify-between gap-4 px-6 py-5">
-              {/* left: studio logo area */}
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-3">
-                  
                   <div className="flex items-center gap-2">
                     <div
                       className="rounded-[6px] px-2.5 py-1 text-sm font-extrabold tracking-wide text-white"
@@ -237,14 +295,14 @@ export default function StudioDashboard() {
                       {studio.logoTextLeft ?? studio.name.split(" ")[0].toUpperCase()}
                     </div>
                     <div className="text-xl font-semibold tracking-wide">
-                      {studio.logoTextRight ?? studio.name.split(" ").slice(1).join(" ").toUpperCase()}
+                      {studio.logoTextRight ??
+                        studio.name.split(" ").slice(1).join(" ").toUpperCase()}
                     </div>
                   </div>
                 </div>
               </div>
 
-            
-              <div className="hidden md:flex w-full max-w-2xl items-center gap-3">
+              <div className="hidden w-full max-w-2xl items-center gap-3 md:flex">
                 <button
                   className="rounded-xl border border-white/10 bg-white/5 p-2.5 text-white/70 hover:text-white"
                   aria-label="Menu"
@@ -263,7 +321,6 @@ export default function StudioDashboard() {
                 </div>
               </div>
 
-             
               <div className="flex items-center gap-3">
                 <button
                   className="rounded-xl border border-white/10 bg-white/5 p-2.5 text-white/70 hover:text-white"
@@ -284,22 +341,23 @@ export default function StudioDashboard() {
 
             <main className="flex-1 overflow-y-auto px-6 py-6">
               {loadingDashboard && (
-                  <div className="mb-4 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/70">
-                    Loading dashboard...
-                  </div>
+                <div className="mb-4 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/70">
+                  Loading dashboard...
+                </div>
               )}
 
               {error && (
-                  <div className="mb-4 rounded-xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-                    {error}
-                  </div>
+                <div className="mb-4 rounded-xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                  {error}
+                </div>
               )}
 
               {loadingSearch && query.trim().length > 0 && (
-                  <div className="mb-4 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/70">
-                    Searching movies...
-                  </div>
+                <div className="mb-4 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/70">
+                  Searching movies...
+                </div>
               )}
+
               <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 {kpis.map(({ label, value, Icon }) => (
                   <div
@@ -315,27 +373,52 @@ export default function StudioDashboard() {
 
                     <div className="min-w-0">
                       <div className="text-sm text-white/55">{label}</div>
-                      <div className="mt-1 text-lg font-semibold text-white">
-                        {value}
-                      </div>
+                      <div className="mt-1 text-lg font-semibold text-white">{value}</div>
                     </div>
                   </div>
                 ))}
               </section>
 
-              {/* Recent movies blocks area */}
               <section className="mt-6">
-                <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
-                  {movieBlocks.map((movie) => (
-                      <MoviePlaceholderCard
-                          key={movie.id}
-                          accent={accent}
-                          hoverAccent
-                          movie={movie}
-                      />
-                  ))}
+                <div className="mb-4">
+                  <h2 className="text-xl font-semibold text-white">Movies</h2>
+                  <p className="mt-1 text-sm text-white/55">
+                    Click a movie to open its Trends, Narratives, and Claims page.
+                  </p>
                 </div>
 
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
+                  {movieBlocks.map((movie, index) => {
+                    const resolvedMovieId = movie.movieid;
+
+                    if (!resolvedMovieId) {
+                      return (
+                        <div
+                          key={`broken-${index}`}
+                          className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200"
+                        >
+                          Movie is missing movieid: {movie.title ?? "Untitled"}
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <Link
+                        key={resolvedMovieId}
+                        href={`/studio/${studioId}/movies/${resolvedMovieId}`}
+                        className="block"
+                      >
+                        <MoviePlaceholderCard accent={accent} hoverAccent movie={movie} />
+                      </Link>
+                    );
+                  })}
+                </div>
+
+                {movieBlocks.length === 0 && !loadingDashboard && (
+                  <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-8 text-center text-sm text-white/60">
+                    No movies found.
+                  </div>
+                )}
               </section>
             </main>
           </div>
@@ -346,10 +429,10 @@ export default function StudioDashboard() {
 }
 
 function MoviePlaceholderCard({
-                                accent,
-                                hoverAccent,
-                                movie,
-                              }: {
+  accent,
+  hoverAccent,
+  movie,
+}: {
   accent: string;
   hoverAccent?: boolean;
   movie?: Movie;
@@ -363,95 +446,91 @@ function MoviePlaceholderCard({
   const showPoster = Boolean(movie?.posterUrl) && !imgFailed;
 
   return (
-      <div
-          className={[
-            "cursor-pointer group relative h-90 w-full overflow-hidden rounded-[22px] border bg-white/5",
-            "border-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]",
-          ].join(" ")}
-          style={
-            hoverAccent
-                ? {
-                  borderColor: "rgba(255,255,255,0.10)",
-                }
-                : undefined
-          }
-      >
-        {showPoster ? (
-            <img
-                src={movie!.posterUrl}
-                alt={movie?.title ?? "Movie poster"}
-                className="absolute inset-0 h-full w-full object-cover"
-                onError={() => setImgFailed(true)}
-            />
-        ) : (
-            <div className="absolute inset-0 bg-black">
-              <div
-                  className="absolute inset-x-0 top-0 h-1"
-                  style={{ backgroundColor: accent }}
-              />
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.08),transparent_35%)]" />
-              <div className="flex h-full w-full flex-col items-center justify-center px-6 text-center">
-                <div className="text-3xl font-extrabold uppercase tracking-[0.12em] text-white">
-                  {movie?.title ?? "Untitled"}
-                </div>
-                {movie?.year && (
-                    <div className="mt-2 text-sm tracking-[0.2em] text-white/50">
-                      {movie.year}
-                    </div>
-                )}
-              </div>
+    <div
+      className={[
+        "group relative h-90 w-full overflow-hidden rounded-[22px] border bg-white/5",
+        "border-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]",
+      ].join(" ")}
+      style={
+        hoverAccent
+          ? {
+              borderColor: "rgba(255,255,255,0.10)",
+            }
+          : undefined
+      }
+    >
+      {showPoster ? (
+        <img
+          src={movie!.posterUrl!}
+          alt={movie?.title ?? "Movie poster"}
+          className="absolute inset-0 h-full w-full object-cover"
+          onError={() => setImgFailed(true)}
+        />
+      ) : (
+        <div className="absolute inset-0 bg-black">
+          <div
+            className="absolute inset-x-0 top-0 h-1"
+            style={{ backgroundColor: accent }}
+          />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.08),transparent_35%)]" />
+          <div className="flex h-full w-full flex-col items-center justify-center px-6 text-center">
+            <div className="text-3xl font-extrabold uppercase tracking-[0.12em] text-white">
+              {movie?.title ?? "Untitled"}
             </div>
-        )}
-
-        <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent" />
-
-        {hoverAccent && (
-            <div
-                className="pointer-events-none absolute inset-0 rounded-[22px] opacity-0 transition-opacity duration-200 group-hover:opacity-100"
-                style={{
-                  boxShadow: `0 0 0 1px ${hexToRgba(accent, 0.9)}, 0 25px 60px rgba(0,0,0,0.55)`,
-                  border: `1px solid ${hexToRgba(accent, 0.9)}`,
-                }}
-            />
-        )}
-
-        <div className="absolute inset-x-0 bottom-0 p-4">
-          {showPoster && (
-              <>
-                <div className="text-lg font-semibold text-white">
-                  {movie?.title ?? "No title"}
-                </div>
-
-                {movie?.year && (
-                    <div className="mt-1 text-sm text-white/70">{movie.year}</div>
-                )}
-              </>
-          )}
-
-          {movie?.summary && (
-              <p className={`${showPoster ? "mt-2" : ""} line-clamp-3 text-sm text-white/75`}>
-                {movie.summary}
-              </p>
-          )}
-
-          <div className="mt-3 flex flex-wrap gap-2">
-            {movie?.sentimentLabel && (
-                <span className="rounded-full bg-white/10 px-2.5 py-1 text-xs text-white/85">
-              {movie.sentimentLabel}
-            </span>
-            )}
-            {movie?.engagementLabel && (
-                <span className="rounded-full bg-white/10 px-2.5 py-1 text-xs text-white/85">
-              {movie.engagementLabel}
-            </span>
+            {movie?.year && (
+              <div className="mt-2 text-sm tracking-[0.2em] text-white/50">
+                {movie.year}
+              </div>
             )}
           </div>
         </div>
+      )}
+
+      <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent" />
+
+      {hoverAccent && (
+        <div
+          className="pointer-events-none absolute inset-0 rounded-[22px] opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+          style={{
+            boxShadow: `0 0 0 1px ${hexToRgba(accent, 0.9)}, 0 25px 60px rgba(0,0,0,0.55)`,
+            border: `1px solid ${hexToRgba(accent, 0.9)}`,
+          }}
+        />
+      )}
+
+      <div className="absolute inset-x-0 bottom-0 p-4">
+        {showPoster && (
+          <>
+            <div className="text-lg font-semibold text-white">
+              {movie?.title ?? "No title"}
+            </div>
+            {movie?.year && <div className="mt-1 text-sm text-white/70">{movie.year}</div>}
+          </>
+        )}
+
+        {movie?.summary && (
+          <p className={`${showPoster ? "mt-2" : ""} line-clamp-3 text-sm text-white/75`}>
+            {movie.summary}
+          </p>
+        )}
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          {movie?.sentimentLabel && (
+            <span className="rounded-full bg-white/10 px-2.5 py-1 text-xs text-white/85">
+              {movie.sentimentLabel}
+            </span>
+          )}
+          {movie?.engagementLabel && (
+            <span className="rounded-full bg-white/10 px-2.5 py-1 text-xs text-white/85">
+              {movie.engagementLabel}
+            </span>
+          )}
+        </div>
       </div>
+    </div>
   );
 }
 
-/* helpers */
 function hexToRgba(hex: string, alpha: number) {
   const h = hex.replace("#", "").trim();
   const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
@@ -463,7 +542,6 @@ function hexToRgba(hex: string, alpha: number) {
 }
 
 function formatCompact(n: number) {
- 
   const abs = Math.abs(n);
   if (abs >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`;
   if (abs >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
