@@ -84,8 +84,19 @@ function normalizeMovie(raw: RawMovie, fallbackStudioId?: string): Movie | null 
 
 export default function StudioDashboard() {
   const params = useParams();
+  const [restoreKey, setRestoreKey] = useState(0);
   const studioId = params?.studioId as string;
-  const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000";
+  const apiBaseUrl =
+      process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8010";
+
+  useEffect(() => {
+    const handlePageShow = () => {
+      setRestoreKey((k) => k + 1);
+    };
+
+    window.addEventListener("pageshow", handlePageShow);
+    return () => window.removeEventListener("pageshow", handlePageShow);
+  }, []);
 
   const mockStudio: Studio = {
     id: "b1fe663f-b0e7-46fd-acf5-53056959f268",
@@ -181,10 +192,10 @@ export default function StudioDashboard() {
         setLoadingSearch(true);
 
         const res = await fetch(
-          `${apiBaseUrl}/api/v1/studios/${studioId}/movies/search?query=${encodeURIComponent(
-            query
-          )}&limit=12`,
-          { cache: "no-store" }
+            `${apiBaseUrl}/api/v1/studios/${studioId}/movies/search?query=${encodeURIComponent(
+                query
+            )}&limit=12`,
+            { cache: "no-store" }
         );
 
         if (!res.ok) {
@@ -193,8 +204,8 @@ export default function StudioDashboard() {
 
         const data: RawMovie[] = await res.json();
         const normalized = data
-          .map((movie) => normalizeMovie(movie, studioId))
-          .filter((movie): movie is Movie => movie !== null);
+            .map((movie) => normalizeMovie(movie, studioId))
+            .filter((movie): movie is Movie => movie !== null);
 
         setMovieResults(normalized);
       } catch (err) {
@@ -212,322 +223,340 @@ export default function StudioDashboard() {
   const metrics = dashboardData?.metrics ?? mockMetrics;
 
   const fallbackMovies = useMemo(
-    () =>
-      (dashboardData?.recentMovies ?? mockRecentMovies)
-        .map((movie) => normalizeMovie(movie, studioId))
-        .filter((movie): movie is Movie => movie !== null),
-    [dashboardData?.recentMovies, studioId]
+      () =>
+          (dashboardData?.recentMovies ?? mockRecentMovies)
+              .map((movie) => normalizeMovie(movie, studioId))
+              .filter((movie): movie is Movie => movie !== null),
+      [dashboardData?.recentMovies, studioId]
   );
 
-  const displayedMovies = query.trim().length > 0 ? movieResults ?? [] : fallbackMovies;
+  const displayedMovies =
+      query.trim().length > 0 ? movieResults ?? [] : fallbackMovies;
   const accent = studio.brandAccent;
 
   const kpis = useMemo(
-    () => [
-      {
-        label: "Total Movies",
-        value: metrics.totalMovies,
-        Icon: Film,
-      },
-      {
-        label: "Avg rating",
-        value: metrics.avgRating,
-        Icon: Star,
-      },
-      {
-        label: "Creator risk score",
-        value: metrics.creatorRiskScore,
-        Icon: TrendingUp,
-      },
-      {
-        label: metrics.extraLabel ?? "Profit",
-        value:
-          metrics.extraLabel && metrics.extraValue !== undefined
-            ? metrics.extraValue
-            : metrics.profit !== undefined
-            ? `$${formatCompact(metrics.profit)}`
-            : "—",
-        Icon: ThumbsUp,
-      },
-    ],
-    [metrics]
+      () => [
+        {
+          label: "Total Movies",
+          value: metrics.totalMovies,
+          Icon: Film,
+        },
+        {
+          label: "Avg rating",
+          value: metrics.avgRating,
+          Icon: Star,
+        },
+        {
+          label: "Creator risk score",
+          value: metrics.creatorRiskScore,
+          Icon: TrendingUp,
+        },
+        {
+          label: metrics.extraLabel ?? "Profit",
+          value:
+              metrics.extraLabel && metrics.extraValue !== undefined
+                  ? metrics.extraValue
+                  : metrics.profit !== undefined
+                      ? `$${formatCompact(metrics.profit)}`
+                      : "—",
+          Icon: ThumbsUp,
+        },
+      ],
+      [metrics]
   );
 
   const movieBlocks = useMemo(() => {
     const seen = new Set<string>();
 
     return displayedMovies
-      .filter((movie) => {
-        if (!movie.movieid) return false;
-        if (seen.has(movie.movieid)) return false;
-        seen.add(movie.movieid);
-        return true;
-      })
-      .slice(0, 12);
+        .filter((movie) => {
+          if (!movie.movieid) return false;
+          if (seen.has(movie.movieid)) return false;
+          seen.add(movie.movieid);
+          return true;
+        })
+        .slice(0, 12);
   }, [displayedMovies]);
 
   return (
-    <div className="h-screen w-screen bg-[#0B0B0B] text-white">
-      <div className="h-full">
-        <div className="relative h-full w-full overflow-hidden bg-black shadow-[0_30px_120px_rgba(0,0,0,0.65)] ring-1 ring-white/10">
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-0 opacity-80"
-            style={{
-              backgroundImage: `radial-gradient(1200px 700px at 20% 20%, ${hexToRgba(
-                accent,
-                0.28
-              )}, transparent 60%),
+      <div className="h-screen w-screen bg-[#0B0B0B] text-white">
+        <div className="h-full">
+          <div className="relative h-full w-full overflow-hidden bg-black shadow-[0_30px_120px_rgba(0,0,0,0.65)] ring-1 ring-white/10">
+            <div
+                aria-hidden
+                className="pointer-events-none absolute inset-0 opacity-80"
+                style={{
+                  backgroundImage: `radial-gradient(1200px 700px at 20% 20%, ${hexToRgba(
+                      accent,
+                      0.28
+                  )}, transparent 60%),
               radial-gradient(900px 600px at 80% 30%, rgba(255,255,255,0.06), transparent 55%),
               linear-gradient(to right, rgba(255,255,255,0.06), transparent 20%, transparent 80%, rgba(255,255,255,0.05))`,
-            }}
-          />
+                }}
+            />
 
-          <div className="relative flex h-full flex-col">
-            <header className="flex items-center justify-between gap-4 px-6 py-5">
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-2">
-                    <div
-                      className="rounded-[6px] px-2.5 py-1 text-sm font-extrabold tracking-wide text-white"
-                      style={{ backgroundColor: accent }}
-                    >
-                      {studio.logoTextLeft ?? studio.name.split(" ")[0].toUpperCase()}
-                    </div>
-                    <div className="text-xl font-semibold tracking-wide">
-                      {studio.logoTextRight ??
-                        studio.name.split(" ").slice(1).join(" ").toUpperCase()}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="hidden w-full max-w-2xl items-center gap-3 md:flex">
-                <button
-                  className="rounded-xl border border-white/10 bg-white/5 p-2.5 text-white/70 hover:text-white"
-                  aria-label="Menu"
-                >
-                  <Menu className="h-5 w-5" />
-                </button>
-
-                <div className="relative w-full">
-                  <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" />
-                  <input
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Search movies"
-                    className="w-full rounded-2xl border border-white/10 bg-white/5 py-3 pl-11 pr-4 text-sm text-white placeholder:text-white/35 outline-none shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] focus:border-white/20"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <button
-                  className="rounded-xl border border-white/10 bg-white/5 p-2.5 text-white/70 hover:text-white"
-                  aria-label="Notifications"
-                >
-                  <Bell className="h-5 w-5" />
-                </button>
-
-                <div className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/5 text-sm font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
-                  {studio.initials}
-                </div>
-              </div>
-            </header>
-
-            <div className="px-6">
-              <div className="h-px w-full bg-white/10" />
-            </div>
-
-            <main className="flex-1 overflow-y-auto px-6 py-6">
-              {loadingDashboard && (
-                <div className="mb-4 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/70">
-                  Loading dashboard...
-                </div>
-              )}
-
-              {error && (
-                <div className="mb-4 rounded-xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-                  {error}
-                </div>
-              )}
-
-              {loadingSearch && query.trim().length > 0 && (
-                <div className="mb-4 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/70">
-                  Searching movies...
-                </div>
-              )}
-
-              <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                {kpis.map(({ label, value, Icon }) => (
-                  <div
-                    key={label}
-                    className="relative flex items-center gap-4 rounded-[18px] border border-white/10 bg-white/5 px-6 py-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
-                  >
-                    <div
-                      className="flex h-12 w-12 items-center justify-center rounded-[16px]"
-                      style={{ backgroundColor: hexToRgba(accent, 0.25) }}
-                    >
-                      <Icon className="h-6 w-6" style={{ color: accent }} />
-                    </div>
-
-                    <div className="min-w-0">
-                      <div className="text-sm text-white/55">{label}</div>
-                      <div className="mt-1 text-lg font-semibold text-white">{value}</div>
-                    </div>
-                  </div>
-                ))}
-              </section>
-
-              <section className="mt-6">
-                <div className="mb-4">
-                  <h2 className="text-xl font-semibold text-white">Movies</h2>
-                  <p className="mt-1 text-sm text-white/55">
-                    Click a movie to open its Trends, Narratives, and Claims page.
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
-                  {movieBlocks.map((movie, index) => {
-                    const resolvedMovieId = movie.movieid;
-
-                    if (!resolvedMovieId) {
-                      return (
-                        <div
-                          key={`broken-${index}`}
-                          className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200"
-                        >
-                          Movie is missing movieid: {movie.title ?? "Untitled"}
-                        </div>
-                      );
-                    }
-
-                    return (
-                      <Link
-                        key={resolvedMovieId}
-                        href={`/studio/${studioId}/movies/${resolvedMovieId}`}
-                        className="block"
+            <div className="relative flex h-full flex-col">
+              <header className="flex items-center justify-between gap-4 px-6 py-5">
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
+                      <div
+                          className="rounded-[6px] px-2.5 py-1 text-sm font-extrabold tracking-wide text-white"
+                          style={{ backgroundColor: accent }}
                       >
-                        <MoviePlaceholderCard accent={accent} hoverAccent movie={movie} />
-                      </Link>
-                    );
-                  })}
+                        {studio.logoTextLeft ??
+                            studio.name.split(" ")[0].toUpperCase()}
+                      </div>
+                      <div className="text-xl font-semibold tracking-wide">
+                        {studio.logoTextRight ??
+                            studio.name.split(" ").slice(1).join(" ").toUpperCase()}
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
-                {movieBlocks.length === 0 && !loadingDashboard && (
-                  <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-8 text-center text-sm text-white/60">
-                    No movies found.
+                <div className="hidden w-full max-w-2xl items-center gap-3 md:flex">
+                  <button
+                      className="rounded-xl border border-white/10 bg-white/5 p-2.5 text-white/70 hover:text-white"
+                      aria-label="Menu"
+                  >
+                    <Menu className="h-5 w-5" />
+                  </button>
+
+                  <div className="relative w-full">
+                    <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" />
+                    <input
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        placeholder="Search movies"
+                        className="w-full rounded-2xl border border-white/10 bg-white/5 py-3 pl-11 pr-4 text-sm text-white placeholder:text-white/35 outline-none shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] focus:border-white/20"
+                    />
                   </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <button
+                      className="rounded-xl border border-white/10 bg-white/5 p-2.5 text-white/70 hover:text-white"
+                      aria-label="Notifications"
+                  >
+                    <Bell className="h-5 w-5" />
+                  </button>
+
+                  <div className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/5 text-sm font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+                    {studio.initials}
+                  </div>
+                </div>
+              </header>
+
+              <div className="px-6">
+                <div className="h-px w-full bg-white/10" />
+              </div>
+
+              <main
+                  key={`${studioId}-${restoreKey}`}
+                  className="flex-1 overflow-y-auto px-6 py-6"
+              >
+                {loadingDashboard && (
+                    <div className="mb-4 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/70">
+                      Loading dashboard...
+                    </div>
                 )}
-              </section>
-            </main>
+
+                {error && (
+                    <div className="mb-4 rounded-xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                      {error}
+                    </div>
+                )}
+
+                {loadingSearch && query.trim().length > 0 && (
+                    <div className="mb-4 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/70">
+                      Searching movies...
+                    </div>
+                )}
+
+                <section className="flex flex-wrap gap-6">
+                  {kpis.map(({ label, value, Icon }) => (
+                      <div
+                          key={label}
+                          className="w-full md:w-[calc(50%-0.75rem)] xl:w-[calc(25%-1.125rem)]"
+                      >
+                        <div className="relative flex w-full min-w-0 items-center gap-4 rounded-[18px] border border-white/10 bg-white/5 px-6 py-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+                          <div
+                              className="flex h-12 w-12 items-center justify-center rounded-[16px]"
+                              style={{ backgroundColor: hexToRgba(accent, 0.25) }}
+                          >
+                            <Icon className="h-6 w-6" style={{ color: accent }} />
+                          </div>
+
+                          <div className="min-w-0">
+                            <div className="text-sm text-white/55">{label}</div>
+                            <div className="mt-1 text-lg font-semibold text-white">
+                              {value}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                  ))}
+                </section>
+
+                <section className="mt-6">
+                  <div className="mb-4">
+                    <h2 className="text-xl font-semibold text-white">Movies</h2>
+                    <p className="mt-1 text-sm text-white/55">
+                      Click a movie to open its Trends, Narratives, and Claims
+                      page.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap gap-6">
+                    {movieBlocks.map((movie, index) => {
+                      const resolvedMovieId = movie.movieid;
+
+                      if (!resolvedMovieId) {
+                        return (
+                            <div
+                                key={`broken-${index}`}
+                                className="w-full rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200"
+                            >
+                              Movie is missing movieid: {movie.title ?? "Untitled"}
+                            </div>
+                        );
+                      }
+
+                      return (
+                          <div
+                              key={resolvedMovieId}
+                              className="w-full md:w-[calc(50%-0.75rem)] xl:w-[calc(25%-1.125rem)]"
+                          >
+                            <Link
+                                href={`/studio/${studioId}/movies/${resolvedMovieId}`}
+                                className="block h-full w-full min-w-0"
+                            >
+                              <MoviePlaceholderCard
+                                  accent={accent}
+                                  hoverAccent
+                                  movie={movie}
+                              />
+                            </Link>
+                          </div>
+                      );
+                    })}
+                  </div>
+
+                  {movieBlocks.length === 0 && !loadingDashboard && (
+                      <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-8 text-center text-sm text-white/60">
+                        No movies found.
+                      </div>
+                  )}
+                </section>
+              </main>
+            </div>
           </div>
         </div>
       </div>
-    </div>
   );
 }
 
 function MoviePlaceholderCard({
-  accent,
-  hoverAccent,
-  movie,
-}: {
+                                accent,
+                                hoverAccent,
+                                movie,
+                              }: {
   accent: string;
   hoverAccent?: boolean;
   movie?: Movie;
 }) {
-  const [imgFailed, setImgFailed] = useState(false);
+  const posterUrl = movie?.posterUrl ?? null;
+  const [failedPosterUrl, setFailedPosterUrl] = useState<string | null>(null);
 
-  useEffect(() => {
-    setImgFailed(false);
-  }, [movie?.posterUrl]);
-
-  const showPoster = Boolean(movie?.posterUrl) && !imgFailed;
+  const showPoster = Boolean(posterUrl) && failedPosterUrl !== posterUrl;
 
   return (
-    <div
-      className={[
-        "group relative h-90 w-full overflow-hidden rounded-[22px] border bg-white/5",
-        "border-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]",
-      ].join(" ")}
-      style={
-        hoverAccent
-          ? {
-              borderColor: "rgba(255,255,255,0.10)",
-            }
-          : undefined
-      }
-    >
-      {showPoster ? (
-        <img
-          src={movie!.posterUrl!}
-          alt={movie?.title ?? "Movie poster"}
-          className="absolute inset-0 h-full w-full object-cover"
-          onError={() => setImgFailed(true)}
-        />
-      ) : (
-        <div className="absolute inset-0 bg-black">
-          <div
-            className="absolute inset-x-0 top-0 h-1"
-            style={{ backgroundColor: accent }}
-          />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.08),transparent_35%)]" />
-          <div className="flex h-full w-full flex-col items-center justify-center px-6 text-center">
-            <div className="text-3xl font-extrabold uppercase tracking-[0.12em] text-white">
-              {movie?.title ?? "Untitled"}
-            </div>
-            {movie?.year && (
-              <div className="mt-2 text-sm tracking-[0.2em] text-white/50">
-                {movie.year}
+      <div
+          className={[
+            "group relative block h-full min-h-[420px] w-full min-w-0 overflow-hidden rounded-[22px] border bg-white/5",
+            "border-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]",
+          ].join(" ")}
+          style={
+            hoverAccent
+                ? {
+                  borderColor: "rgba(255,255,255,0.10)",
+                }
+                : undefined
+          }
+      >
+        {showPoster ? (
+            <img
+                key={posterUrl ?? "no-poster"}
+                src={posterUrl!}
+                alt={movie?.title ?? "Movie poster"}
+                className="absolute inset-0 h-full w-full object-cover"
+                onError={() => setFailedPosterUrl(posterUrl)}
+            />
+        ) : (
+            <div className="absolute inset-0 bg-black">
+              <div
+                  className="absolute inset-x-0 top-0 h-1"
+                  style={{ backgroundColor: accent }}
+              />
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.08),transparent_35%)]" />
+              <div className="flex h-full w-full flex-col items-center justify-center px-6 text-center">
+                <div className="text-3xl font-extrabold uppercase tracking-[0.12em] text-white">
+                  {movie?.title ?? "Untitled"}
+                </div>
+                {movie?.year && (
+                    <div className="mt-2 text-sm tracking-[0.2em] text-white/50">
+                      {movie.year}
+                    </div>
+                )}
               </div>
+            </div>
+        )}
+
+        <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent" />
+
+        {hoverAccent && (
+            <div
+                className="pointer-events-none absolute inset-0 rounded-[22px] opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+                style={{
+                  boxShadow: `0 0 0 1px ${hexToRgba(accent, 0.9)}, 0 25px 60px rgba(0,0,0,0.55)`,
+                  border: `1px solid ${hexToRgba(accent, 0.9)}`,
+                }}
+            />
+        )}
+
+        <div className="absolute inset-x-0 bottom-0 p-4">
+          {showPoster && (
+              <>
+                <div className="text-lg font-semibold text-white">
+                  {movie?.title ?? "No title"}
+                </div>
+                {movie?.year && (
+                    <div className="mt-1 text-sm text-white/70">{movie.year}</div>
+                )}
+              </>
+          )}
+
+          {movie?.summary && (
+              <p className={`${showPoster ? "mt-2" : ""} line-clamp-3 text-sm text-white/75`}>
+                {movie.summary}
+              </p>
+          )}
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            {movie?.sentimentLabel && (
+                <span className="rounded-full bg-white/10 px-2.5 py-1 text-xs text-white/85">
+              {movie.sentimentLabel}
+            </span>
+            )}
+            {movie?.engagementLabel && (
+                <span className="rounded-full bg-white/10 px-2.5 py-1 text-xs text-white/85">
+              {movie.engagementLabel}
+            </span>
             )}
           </div>
         </div>
-      )}
-
-      <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent" />
-
-      {hoverAccent && (
-        <div
-          className="pointer-events-none absolute inset-0 rounded-[22px] opacity-0 transition-opacity duration-200 group-hover:opacity-100"
-          style={{
-            boxShadow: `0 0 0 1px ${hexToRgba(accent, 0.9)}, 0 25px 60px rgba(0,0,0,0.55)`,
-            border: `1px solid ${hexToRgba(accent, 0.9)}`,
-          }}
-        />
-      )}
-
-      <div className="absolute inset-x-0 bottom-0 p-4">
-        {showPoster && (
-          <>
-            <div className="text-lg font-semibold text-white">
-              {movie?.title ?? "No title"}
-            </div>
-            {movie?.year && <div className="mt-1 text-sm text-white/70">{movie.year}</div>}
-          </>
-        )}
-
-        {movie?.summary && (
-          <p className={`${showPoster ? "mt-2" : ""} line-clamp-3 text-sm text-white/75`}>
-            {movie.summary}
-          </p>
-        )}
-
-        <div className="mt-3 flex flex-wrap gap-2">
-          {movie?.sentimentLabel && (
-            <span className="rounded-full bg-white/10 px-2.5 py-1 text-xs text-white/85">
-              {movie.sentimentLabel}
-            </span>
-          )}
-          {movie?.engagementLabel && (
-            <span className="rounded-full bg-white/10 px-2.5 py-1 text-xs text-white/85">
-              {movie.engagementLabel}
-            </span>
-          )}
-        </div>
       </div>
-    </div>
   );
 }
 
