@@ -70,6 +70,42 @@ def insert_insights_payload(cursor, runid, movieid, result):
         json.dumps(result.get("creator_risk", {}))
     ))
 
+def insert_movie_analytics_snapshot(cursor, movieid, result, total_views=None, total_likes=None, total_review_videos=0):
+    sentiment = result.get("sentiment_breakdown", {})
+    creator_risk = result.get("creator_risk", {})
+    risk_score = creator_risk.get("risk_score")
+
+    cursor.execute("""
+        INSERT INTO movieanalyticssnapshots (
+            movieid,
+            totalreviewvideos,
+            averagesentiment,
+            totalviews,
+            totallikes,
+            pospct,
+            negpct,
+            neupct,
+            topsentimentwords,
+            creatorriskscore,
+            moodsignals,
+            keydiscussiontopics
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+    """, (
+        movieid,
+        total_review_videos,
+        sentiment.get("avg_sentiment_score"),
+        total_views,
+        total_likes,
+        sentiment.get("positive_pct", 0),
+        sentiment.get("negative_pct", 0),
+        sentiment.get("neutral_pct", 0),
+        json.dumps(result.get("top_words", [])),
+        risk_score,
+        json.dumps(result.get("mood_signals", [])),
+        json.dumps(result.get("top_narratives", []))
+    ))
+
 def load_llm_output(runid, movieid, result):
     try:
         cursor = conn.cursor()
@@ -82,6 +118,9 @@ def load_llm_output(runid, movieid, result):
 
         print("Saving insight payload")
         insert_insights_payload(cursor, runid, movieid, result)
+        
+        print("Saving analytics snapshot")
+        insert_movie_analytics_snapshot(cursor, movieid, result)
 
         conn.commit()
 
