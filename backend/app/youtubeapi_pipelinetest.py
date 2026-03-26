@@ -1,7 +1,6 @@
 # general imports
 import re
 import time
-import json
 from googleapiclient.discovery import build
 from datetime import datetime, timezone
 
@@ -12,8 +11,8 @@ import tempfile
 import math
 
 # imports for Gemini 3 Flash
-from google import genai
-from google.genai import types
+# from google import genai
+# from google.genai import types
 
 # imports for TMDB API
 import requests
