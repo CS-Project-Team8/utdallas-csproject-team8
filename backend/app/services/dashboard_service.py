@@ -40,6 +40,7 @@ def engagement_label(total_views, total_likes):
 
 def get_studio_dashboard(db, studio_id: str):
     studio_sql = text("""
+<<<<<<< Updated upstream
         SELECT
             s.studioid,
             s.name,
@@ -50,6 +51,18 @@ def get_studio_dashboard(db, studio_id: str):
         FROM studios s
         WHERE s.studioid = :studio_id
     """)
+=======
+                      SELECT
+                          s.studioid,
+                          s.name,
+                          s.brandaccent AS "brandAccent",
+                          s.initials,
+                          s.logotextleft AS "logoTextLeft",
+                          s.logotextright AS "logoTextRight"
+                      FROM studios s
+                      WHERE s.studioid = :studio_id
+                      """)
+>>>>>>> Stashed changes
 
     metrics_sql = text("""
         WITH latest_snapshots AS (
