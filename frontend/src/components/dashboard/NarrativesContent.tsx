@@ -42,7 +42,7 @@ export default function NarrativesContent() {
         setError(null);
 
         const baseUrl =
-            process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8010";
+            (process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8010").replace(/\/+$/, "");
 
         const res = await fetch(
             `${baseUrl}/api/v1/studios/${studioId}/movies/${movieId}/narratives`,
