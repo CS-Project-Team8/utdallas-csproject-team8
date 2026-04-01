@@ -32,7 +32,9 @@ export default function StudioAuthScreen() {
       const cred = await signInWithEmailAndPassword(auth, email, password);
       const token = await cred.user.getIdToken();
 
-      const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/user-login-check`, {
+      const baseUrl = (process.env.NEXT_PUBLIC_BACKEND_URL ?? "").replace(/\/+$/, "");
+
+      const res = await fetch(`${baseUrl}/auth/user-login-check`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
