@@ -30,8 +30,10 @@ export default function AdminLoginPage() {
       const cred = await signInWithEmailAndPassword(auth, email, password);
       const token = await cred.user.getIdToken();
 
+      const baseUrl = (process.env.NEXT_PUBLIC_BACKEND_URL ?? "").replace(/\/+$/, "");
+
       const res = await fetch(
-          `${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/admin-login-check`,
+          `${baseUrl}/auth/admin-login-check`,
           {
             method: "POST",
             headers: {

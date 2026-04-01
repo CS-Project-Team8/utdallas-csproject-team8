@@ -54,7 +54,9 @@ export default function SendInvitePage() {
 
       const token = await currentUser.getIdToken();
 
-      const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/invites`, {
+      const baseUrl = (process.env.NEXT_PUBLIC_BACKEND_URL ?? "").replace(/\/+$/, "");
+
+      const res = await fetch(`${baseUrl}/invites`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

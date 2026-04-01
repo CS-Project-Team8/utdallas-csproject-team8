@@ -9,6 +9,7 @@ export default function AcceptInviteClient() {
 
   const token = searchParams.get("token") || "";
   const email = searchParams.get("email") || "";
+  const baseUrl = (process.env.NEXT_PUBLIC_BACKEND_URL ?? "").replace(/\/+$/, "");
 
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
@@ -20,7 +21,7 @@ export default function AcceptInviteClient() {
     async function validateInvite() {
       try {
         const res = await fetch(
-          `${process.env.NEXT_PUBLIC_BACKEND_URL}/invites/validate?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`
+            `${baseUrl}/invites/validate?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`
         );
 
         const data = await res.json();
@@ -54,19 +55,19 @@ export default function AcceptInviteClient() {
 
     try {
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_BACKEND_URL}/invites/accept`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            token,
-            email,
-            password,
-            display_name: displayName,
-          }),
-        }
+          `${baseUrl}/invites/accept`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              token,
+              email,
+              password,
+              display_name: displayName,
+            }),
+          }
       );
 
       const data = await res.json();
