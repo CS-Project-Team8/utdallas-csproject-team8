@@ -42,12 +42,12 @@ DEVELOPER_KEY1 = os.getenv("YOUTUBE_API_KEY_1")
 DEVELOPER_KEY2 = os.getenv("YOUTUBE_API_KEY_2")
 DEVELOPER_KEY3 = os.getenv("YOUTUBE_API_KEY_3")
 #GEMINI_API_KEY  = os.getenv("GEMINI_API_KEY")
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GROQ_TRANSCRIPT_API_KEY = os.getenv("GROQ_TRANSCRIPT_API_KEY")
 TMDB_API_KEY    = os.getenv("TMDB_API_KEY")
 
 youtube_object = build("youtube", "v3", developerKey=DEVELOPER_KEY2)
 #client = genai.Client(api_key=GEMINI_API_KEY)
-client = Groq(api_key=GROQ_API_KEY)
+client = Groq(api_key=GROQ_TRANSCRIPT_API_KEY)
 
 TRAILER_KEYWORDS = ["official trailer", "trailer", "official teaser", "teaser"]
 QUOTA_LIMIT = 9000  # hard stop before hitting YouTube's 10,000 daily limit

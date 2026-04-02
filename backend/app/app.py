@@ -6,9 +6,9 @@ from dotenv import load_dotenv
 from db_routes import get_conn, load_llm_output, get_movie_data_for_llm, get_movie_id_from_title, get_studio_id_from_movie_id, insert_insight_run
 
 load_dotenv()
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GROQ_LLM_API_KEY = os.getenv("GROQ_LLM_API_KEY")
 
-client = Groq(api_key=GROQ_API_KEY)
+client = Groq(api_key=GROQ_LLM_API_KEY)
 
 # different llm prompts for trailer vs reviews
 TRAILER_PROMPT = """
@@ -399,32 +399,32 @@ Guidelines:
 """
 
 # clean up input given by user to make it easier for llm to understand
-def clean_comments_input(transcript, comments):
-    # for c in comments:
-    #     formatter = "\n- "
-    #     cleaned_comments = formatter.join(c)
-    cleaned_comments = "\n- " + "\n- ".join(comments)
+# def clean_comments_input(transcript, comments):
+#     # for c in comments:
+#     #     formatter = "\n- "
+#     #     cleaned_comments = formatter.join(c)
+#     cleaned_comments = "\n- " + "\n- ".join(comments)
     
-    cleaned_input = f"""
-    VIDEO TRANSCRIPT ANALYSIS:
-    {json.dumps(transcript, indent=2)}
+#     cleaned_input = f"""
+#     VIDEO TRANSCRIPT ANALYSIS:
+#     {json.dumps(transcript, indent=2)}
 
-    VIEWER COMMENTS:
-    {cleaned_comments}
-    """
+#     VIEWER COMMENTS:
+#     {cleaned_comments}
+#     """
     
-    return cleaned_input
+#     return cleaned_input
 
-def clean_video_input(transcript, comments):
-    cleaned_input = f"""
-    TRANSCRIPT ANALYSIS:
-    {json.dumps(transcript, indent=2)}
+# def clean_video_input(transcript, comments):
+#     cleaned_input = f"""
+#     TRANSCRIPT ANALYSIS:
+#     {json.dumps(transcript, indent=2)}
 
-    COMMENTS ANALYSIS:
-    {json.dumps(comments, indent=2)}
-    """
+#     COMMENTS ANALYSIS:
+#     {json.dumps(comments, indent=2)}
+#     """
     
-    return cleaned_input
+#     return cleaned_input
 
 # also need to clean input given to aggregation prompt
 def clean_aggregation_input(trailer_result, review_results):
@@ -442,18 +442,19 @@ def _build_video_input(transcript, comments):
     comments_block = "\n".join(f"- {c}" for c in comments) if comments else "(no comments)"
     return f"TRANSCRIPT:\n{transcript}\n\nVIEWER COMMENTS:\n{comments_block}"
   
-def _build_aggregation_input(trailer_result, review_results):
-    parts = ["TRAILER INSIGHTS:\n" + json.dumps(trailer_result, indent=2)]
-    for i, review in enumerate(review_results, 1):
-        parts.append(f"REVIEW VIDEO {i} INSIGHTS:\n" + json.dumps(review, indent=2))
-    return "\n\n".join(parts)
+# def _build_aggregation_input(trailer_result, review_results):
+#     parts = ["TRAILER INSIGHTS:\n" + json.dumps(trailer_result, indent=2)]
+#     for i, review in enumerate(review_results, 1):
+#         parts.append(f"REVIEW VIDEO {i} INSIGHTS:\n" + json.dumps(review, indent=2))
+#     return "\n\n".join(parts)
 
 # defining llm model and message so don't have to repeat
 def _call_llm(system_prompt, user_content):
     response = client.chat.completions.create(
         # model="openai/gpt-oss-120b",
-        model = "llama-3.3-70b-versatile", # using this for production
+        # model = "llama-3.3-70b-versatile", # using this for production
         # model = "llama-3.1-8b-instant",  # using this for testing
+        model = "meta-llama/llama-4-scout-17b-16e-instruct",  
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user",   "content": user_content},
@@ -478,44 +479,44 @@ def _parse_json(raw, label="LLM response"):
         print(f"[ERROR] {label} did not return valid JSON:\n{raw}")
         raise
 
-# analyze transcript only (trailer or review)
-def analyze_transcript(transcript, video_type):
-    if video_type == "trailer":
-        system_prompt = TRAILER_PROMPT
-    else:
-        system_prompt = REVIEW_PROMPT
+# # analyze transcript only (trailer or review)
+# def analyze_transcript(transcript, video_type):
+#     if video_type == "trailer":
+#         system_prompt = TRAILER_PROMPT
+#     else:
+#         system_prompt = REVIEW_PROMPT
 
-    return _call_llm(system_prompt, transcript)
-    # response = client.chat.completions.create(
-    #     model="openai/gpt-oss-120b",
-    #     messages=[
-    #         {"role": "system", "content": system_prompt},
-    #         {"role": "user", "content": transcript}
-    #     ],
-    #     temperature=0.3,
-    #     max_completion_tokens=2048,
-    #     stream=False
-    # )
+#     return _call_llm(system_prompt, transcript)
+#     # response = client.chat.completions.create(
+#     #     model="openai/gpt-oss-120b",
+#     #     messages=[
+#     #         {"role": "system", "content": system_prompt},
+#     #         {"role": "user", "content": transcript}
+#     #     ],
+#     #     temperature=0.3,
+#     #     max_completion_tokens=2048,
+#     #     stream=False
+#     # )
 
-    # return response.choices[0].message.content
+#     # return response.choices[0].message.content
 
-# analyze comments for a video transcript
-def analyze_comments(transcript_result, comments):
-    user_input = clean_comments_input(transcript_result, comments)
+# # analyze comments for a video transcript
+# def analyze_comments(transcript_result, comments):
+#     user_input = clean_comments_input(transcript_result, comments)
 
-    return _call_llm(COMMENTS_PROMPT, user_input)
-    # response = client.chat.completions.create(
-    #     model="openai/gpt-oss-120b",
-    #     messages=[
-    #         {"role": "system", "content": COMMENTS_PROMPT},
-    #         {"role": "user", "content": user_input}
-    #     ],
-    #     temperature=0.3,
-    #     max_completion_tokens=2048,
-    #     stream=False
-    # )
+#     return _call_llm(COMMENTS_PROMPT, user_input)
+#     # response = client.chat.completions.create(
+#     #     model="openai/gpt-oss-120b",
+#     #     messages=[
+#     #         {"role": "system", "content": COMMENTS_PROMPT},
+#     #         {"role": "user", "content": user_input}
+#     #     ],
+#     #     temperature=0.3,
+#     #     max_completion_tokens=2048,
+#     #     stream=False
+#     # )
 
-    # return response.choices[0].message.content
+#     # return response.choices[0].message.content
 
 # analyzes a single video (either trailer or review) based on transcript + comments
 def analyze_video(transcript, comments, video_type):
@@ -597,7 +598,7 @@ if __name__ == "__main__":
     # RUN_ID   = "26d2d07a-9dcd-4777-acf0-e338251b039b"
     # MOVIE_ID = "94c045de-0426-423f-b22a-fd13c9c0e23c"
     
-    MOVIE_ID = get_movie_id_from_title("Deadpool & Wolverine")
+    MOVIE_ID = get_movie_id_from_title("Marvel Studios' Doctor Strange in the Multiverse of Madness")
     STUDIO_ID = get_studio_id_from_movie_id(MOVIE_ID)
     
     conn = get_conn()
