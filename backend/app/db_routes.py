@@ -70,38 +70,34 @@ def insert_insights_payload(cursor, runid, movieid, result):
         json.dumps(result.get("creator_risk", {}))
     ))
 
-def insert_movie_analytics_snapshot(cursor, movieid, result, total_views=None, total_likes=None, total_review_videos=0):
+def insert_movie_analytics_snapshot(cursor, movieid, result):
+    risk_score = result.get("creator_risk", {}).get("risk_score")
+    risk_score_scaled = risk_score * 10 if risk_score is not None else None
     sentiment = result.get("sentiment_breakdown", {})
-    creator_risk = result.get("creator_risk", {})
-    risk_score = creator_risk.get("risk_score")
 
     cursor.execute("""
         INSERT INTO movieanalyticssnapshots (
-            movieid,
-            totalreviewvideos,
-            averagesentiment,
-            totalviews,
-            totallikes,
-            pospct,
-            negpct,
-            neupct,
-            topsentimentwords,
-            creatorriskscore,
-            moodsignals,
-            keydiscussiontopics
+            movieid, totalreviewvideos, totalviews, totallikes,
+            averagesentiment, pospct, negpct, neupct,
+            topsentimentwords, creatorriskscore, moodsignals, keydiscussiontopics
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        VALUES (
+            %s,
+            (SELECT COUNT(*) FROM ytvideos WHERE movieid = %s AND videorole = 'review'),
+            (SELECT COALESCE(SUM(viewcount), 0) FROM ytvideometricsnapshots
+             WHERE videoid IN (SELECT videoid FROM ytvideos WHERE movieid = %s)),
+            (SELECT COALESCE(SUM(likecount), 0) FROM ytvideometricsnapshots
+             WHERE videoid IN (SELECT videoid FROM ytvideos WHERE movieid = %s)),
+            %s, %s, %s, %s, %s, %s, %s, %s
+        )
     """, (
-        movieid,
-        total_review_videos,
+        movieid, movieid, movieid, movieid,
         sentiment.get("avg_sentiment_score"),
-        total_views,
-        total_likes,
-        sentiment.get("positive_pct", 0),
-        sentiment.get("negative_pct", 0),
-        sentiment.get("neutral_pct", 0),
+        sentiment.get("positive_pct", 0) / 100.0,
+        sentiment.get("negative_pct", 0) / 100.0,
+        sentiment.get("neutral_pct", 0) / 100.0,
         json.dumps(result.get("top_words", [])),
-        risk_score,
+        risk_score_scaled,
         json.dumps(result.get("mood_signals", [])),
         json.dumps(result.get("top_narratives", []))
     ))
