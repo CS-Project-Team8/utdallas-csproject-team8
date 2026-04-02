@@ -503,7 +503,7 @@ def get_latest_trailers_from_channel(channel_id, limit=5, max_scan=200):
                 candidate_ids.append(vid)
 
     if not candidate_ids:
-        print(f"  No trailer candidates found")
+        print("  No trailer candidates found")
         return []
 
     # Fetch full details for all candidates in one batch
