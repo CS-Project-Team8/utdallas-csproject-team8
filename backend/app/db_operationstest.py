@@ -20,18 +20,20 @@ def insert_yt_channel(cursor, channelid, channeltitle, country):
     """, (channelid, channeltitle, country))
 
 
+# update this to have movieid + videorole
 def insert_yt_video(cursor, videoid, channelid, title, description, publishedat,
+                    movieid=None, videorole=None,
                     durationseconds=None, categoryid=None, defaultlanguage=None,
                     tags=None, caption=None):
     cursor.execute("""
-        INSERT INTO ytVideos (videoId, channelId, title, description, publishedAt,
+        INSERT INTO ytVideos (videoId, movieId, channelId, title, description, videoRole, publishedAt,
                               durationSeconds, categoryId, defaultLanguage, tags, caption)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (videoId) DO UPDATE SET
             title = EXCLUDED.title,
             description = EXCLUDED.description,
             updatedAt = now()
-    """, (videoid, channelid, title, description, publishedat,
+    """, (videoid, movieid, channelid, title, description, videorole, publishedat,
           durationseconds, categoryid, defaultlanguage,
           psycopg2.extras.Json(tags) if tags else None, caption))
 
@@ -75,12 +77,12 @@ def insert_movie(cursor, studioid, title, releasedate=None):
     return cursor.fetchone()[0]
 
 
-def insert_movie_yt_video(cursor, movieid, videoid, videorole, is_primary=False):
-    cursor.execute("""
-        INSERT INTO movieYtVideos (movieId, videoId, videoRole, isPrimary)
-        VALUES (%s, %s, %s, %s)
-        ON CONFLICT (movieId, videoId) DO NOTHING
-    """, (movieid, videoid, videorole, is_primary))
+# def insert_movie_yt_video(cursor, movieid, videoid, videorole, is_primary=False):
+#     cursor.execute("""
+#         INSERT INTO movieYtVideos (movieId, videoId, videoRole, isPrimary)
+#         VALUES (%s, %s, %s, %s)
+#         ON CONFLICT (movieId, videoId) DO NOTHING
+#     """, (movieid, videoid, videorole, is_primary))
 
 
 def insert_movie_metric_snapshot(cursor, movieid, capturedat, viewstotal, likestotal, commentstotal, engagementrate):
@@ -89,6 +91,7 @@ def insert_movie_metric_snapshot(cursor, movieid, capturedat, viewstotal, likest
         VALUES (%s, %s, %s, %s, %s, %s)
         ON CONFLICT (movieId, capturedAt) DO NOTHING
     """, (movieid, capturedat, viewstotal, likestotal, commentstotal, engagementrate))
+    
     
 def insert_transcript(cursor, videoid, language, source, fulltext):
     cursor.execute("""

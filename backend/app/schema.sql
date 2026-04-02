@@ -81,9 +81,12 @@ CREATE TABLE IF NOT EXISTS ytchannels (
 
 CREATE TABLE IF NOT EXISTS ytvideos ( -- what does caption do?
   videoid          TEXT PRIMARY KEY,
+  movieid          TEXT NOT NULL REFERENCES movies(movieid) ON DELETE RESTRICT,
   channelid        TEXT NOT NULL REFERENCES ytchannels(channelid) ON DELETE RESTRICT,
   title            TEXT NOT NULL,
   description      TEXT,
+  videorole        TEXT NOT NULL DEFAULT 'official_trailer'
+    CHECK (videorole IN ('official_trailer','teaser','clip','tv_spot','featurette','review','other')),
   publishedat      TIMESTAMPTZ NOT NULL,
   durationseconds  INT,
   categoryid       TEXT,
@@ -124,16 +127,16 @@ CREATE TABLE IF NOT EXISTS yttranscriptsegments ( -- do we need this table?
 -- ----------------------------
 -- Movie <-> YouTube Videos Link
 -- ----------------------------
-CREATE TABLE IF NOT EXISTS movieytvideos (
-  movieid    UUID NOT NULL REFERENCES movies(movieid) ON DELETE CASCADE,
-  videoid    TEXT NOT NULL REFERENCES ytvideos(videoid) ON DELETE CASCADE,
-  videorole  TEXT NOT NULL DEFAULT 'official_trailer'
-    CHECK (videorole IN ('official_trailer','teaser','clip','tv_spot','featurette','review','other')),
-  isprimary  BOOLEAN NOT NULL DEFAULT false,
-  weight     DOUBLE PRECISION NOT NULL DEFAULT 1.0,
-  addedat    TIMESTAMPTZ NOT NULL DEFAULT now(),
-  PRIMARY KEY (movieid, videoid)
-);
+-- CREATE TABLE IF NOT EXISTS movieytvideos (
+--   movieid    UUID NOT NULL REFERENCES movies(movieid) ON DELETE CASCADE,
+--   videoid    TEXT NOT NULL REFERENCES ytvideos(videoid) ON DELETE CASCADE,
+--   videorole  TEXT NOT NULL DEFAULT 'official_trailer'
+--     CHECK (videorole IN ('official_trailer','teaser','clip','tv_spot','featurette','review','other')),
+--   isprimary  BOOLEAN NOT NULL DEFAULT false,
+--   weight     DOUBLE PRECISION NOT NULL DEFAULT 1.0,
+--   addedat    TIMESTAMPTZ NOT NULL DEFAULT now(),
+--   PRIMARY KEY (movieid, videoid)
+-- );
 
 CREATE INDEX IF NOT EXISTS idx_movieytvideos_movie_role_primary
   ON movieytvideos (movieid, videorole, isprimary);
