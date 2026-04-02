@@ -3,7 +3,7 @@ import json
 import re
 from groq import Groq
 from dotenv import load_dotenv
-from db_routes import load_llm_output, get_movie_data_for_llm
+from db_routes import load_llm_output, get_movie_data_for_llm, get_movie_id_from_title, get_studio_id_from_movie_id, insert_insight_run, conn
 
 load_dotenv()
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
@@ -509,12 +509,13 @@ def run_llm_for_movie(run_id, movie_id):
  
     print("Saving to DB...")
     load_llm_output(run_id, movie_id, result)
-    return result
-  
+    return 
+
 # main   
 if __name__ == "__main__":
-    RUN_ID   = "26d2d07a-9dcd-4777-acf0-e338251b039b"
-    MOVIE_ID = "94c045de-0426-423f-b22a-fd13c9c0e23c"
+    MOVIE_ID = get_movie_id_from_title("How to Make a Killing")
+    STUDIO_ID = get_studio_id_from_movie_id(MOVIE_ID)
+    RUN_ID = insert_insight_run(conn.cursor(), STUDIO_ID)
  
     result = run_llm_for_movie(RUN_ID, MOVIE_ID)
     print("Final aggregated analysis:")

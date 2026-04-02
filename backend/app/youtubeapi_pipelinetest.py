@@ -1,7 +1,6 @@
 # general imports
 import re
 import time
-import json
 from googleapiclient.discovery import build
 from datetime import datetime, timezone
 
@@ -12,8 +11,8 @@ import tempfile
 import math
 
 # imports for Gemini 3 Flash
-from google import genai
-from google.genai import types
+# from google import genai
+# from google.genai import types
 
 # imports for TMDB API
 import requests
@@ -134,7 +133,7 @@ def get_movie_release_date(movie_title):
 # TRANSCRIBE FUNCTIONS:   
     
 GROQ_MAX_FILE_MB = 24 # limit is 25MB 
-GROQ_MAX_SECONDS = 20 * 60  # making it 20 mins max so that way I don't go over limit
+GROQ_MAX_SECONDS = 10 * 60  # making it 10 mins max so that way I don't go over limit
 TRANSCRIBE_SLEEP = 30 # so I don't overload groq
 
 # getting audio file length
@@ -646,7 +645,7 @@ def phase2_insert_reviews(movie_id, movie_name, studio_channel_id):
     candidate_ids = []
     seen = set()
     for template in REVIEW_QUERY_TEMPLATES:
-        query = template.format(title=movie_name)
+        query = template.format(title=f"'{movie_name}'")
         result = youtube_object.search().list(
             q=query,
             part="id,snippet",

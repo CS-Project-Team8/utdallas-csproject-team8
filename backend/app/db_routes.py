@@ -157,3 +157,43 @@ def get_movie_data_for_llm(movie_id):
         raise ValueError(f"No review videos with transcripts found for movie_id: {movie_id}")
 
     return trailer, reviews
+
+  
+# helper method for getting movie_id from movie_title
+def get_movie_id_from_title(movie_title):
+    # Implementation for fetching movie_id based on title
+    with conn.cursor() as cursor:
+        cursor.execute("""
+            SELECT movieid FROM movies
+            WHERE title = %s
+            ORDER BY releasedate DESC NULLS LAST
+            LIMIT 1
+        """, (movie_title,))
+        result = cursor.fetchone()
+        if result:
+            return result[0]
+        else:
+            raise ValueError(f"No movie found with title: {movie_title}")
+
+def insert_insight_run(cursor, studioid):
+    cursor.execute("""
+        INSERT INTO insightruns (studioid, status)
+        VALUES (%s, 'running')
+        RETURNING runid
+    """, (studioid,))
+    result = cursor.fetchone()
+    return result[0] if result else None
+
+
+# helper method for getting studio_id from movie_id
+def get_studio_id_from_movie_id(movie_id):
+    with conn.cursor() as cursor:
+        cursor.execute("""
+            SELECT studioid FROM movies
+            WHERE movieid = %s
+        """, (movie_id,))
+        result = cursor.fetchone()
+        if result:
+            return result[0]
+        else:
+            raise ValueError(f"No movie found with id: {movie_id}")
