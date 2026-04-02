@@ -3,7 +3,7 @@ import json
 import re
 from groq import Groq
 from dotenv import load_dotenv
-from db_routes import load_llm_output, get_movie_data_for_llm
+from db_routes import get_conn, load_llm_output, get_movie_data_for_llm, get_movie_id_from_title, get_studio_id_from_movie_id, insert_insight_run
 
 load_dotenv()
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
@@ -60,20 +60,20 @@ Guidelines:
 - Key takeaways should be actionable for a studio executive reviewing their own promotions.
 """
 
+# had to combine Review_prompt, Comments_prompt, and Video_prompt into one since groq was having trouble with parsing multiple prompts
 REVIEW_PROMPT = """
 You are an expert movie analyst that specializes in intelligence from movie studios and streaming companies. You will be given data 
-from a movie review video posted by an independent YouTube reviewer channel. This channel and its video are not associated with an
-official movie studio and represent authentic public reaction of a movie or studio. This data will be in the form of the video transcript
-and comments. Your job is to analyze this content and return a structured JSON object with insights. Do not return anything else. 
+from a movie review video posted by an independent YouTube reviewer. The data will include the raw transcript and a list of viewer 
+comments. Your job is to analyze both together and return a structured JSON object with insights. Do not return anything else. 
 Do not include any explanation or text outside of the JSON object. If a field cannot be determined from the provided data, use null.
-
+ 
 You must return the following JSON structure exactly:
-
+ 
 {
   "movie": "<name of the specific movie being discussed>",
   "video_type": "review",
   "key_takeaways": [
-    "<concise string about main topics from the review regarding the movie>",
+    "<concise insight synthesized from both the review and audience reaction>",
     ...
   ],
   "claims": [
@@ -99,136 +99,13 @@ You must return the following JSON structure exactly:
     "positive_pct": <integer from 0-100>,
     "negative_pct": <integer from 0-100>,
     "neutral_pct": <integer from 0-100>,
-    "summary": "<1-2 sentences describing the overall tone of the reviewer>"
-  },
-  "top_words": [
-    {
-      "word": "<single word drawn from transcripts>",
-      "sentiment": "<either positive, negative, or mixed>",
-      "count": <integer of how often the word appears>
-    },
-    ...
-  ],
-  "mood_signals": [
-    {
-      "mood": "<single mood like Excitement, Nostalgia, Disappointment, etc>",
-      "percentage": <integer from 0-100, estimate how strongly this mood is present across reviews>
-    },
-    ...
-  ],
-  "creator_risk": {
-    "risk_score": <integer from 1-10>,
-    "risk_level": "<either low, moderate, or high>",
-    "summary": "<2-3 sentences about what this reviewer's reception suggests about franchise or content strategy risk>"
-  }
-}
-
-Guidelines:
-- Claims are a factual statement made in the trailer. Narratives are high-level stories or themes connected by multiple claims.
-- Focus claims on what the reviewer is actually saying about the film. Focus on their thoughts, feelings, and voice.
-- Extract 3-5 key takeaways, 4-6 claims, and 1-3 narratives.
-- Extract exactly 5 moods for mood_signals, each scored individually.
-- Key takeaways should be points a studio executive may need to know about public reaction to the movie.
-- There should be a total of 10 expressive words in top_words, taken directly from the most common sentiment words in the transcript
-"""
-
-COMMENTS_PROMPT = """
-You are an expert movie analyst that specializes in intelligence from movie studios and streaming companies. You will be given data
-in the form of the JSON object with a YouTube video's transcript analysis and the comments on that video. These comments are not associated 
-with an official movie studio and represent authentic public reaction of a movie or studio that the YouTube video is about. Your job is to 
-analyze this content and return a structured JSON object with insights. Do not return anything else. Do not include any explanation or text 
-outside of the JSON object. If a field cannot be determined from the provided data, use null.
-
-You must return the following JSON structure exactly:
-
-{
-  "movie": "<name of the specific movie being discussed>",
-  "claims": [
-    {
-      "claim": "<specific factual or opinion statement made by the comments>",
-      "sentiment": "<either positive, negative, or neutral>"
-    },
-    ...
-  ],
-  "sentiment_breakdown": {
-    "overall_sentiment": "<either positive, negative, or mixed>",
-    "average_sentiment_score": <number between -1.0 and 1.0>,
-    "positive_pct": <integer from 0-100>,
-    "negative_pct": <integer from 0-100>,
-    "neutral_pct": <integer from 0-100>,
-    "summary": "<1-2 sentences describing the audience reaction to this video>"
-  },
-  "top_words": [
-    {
-      "word": "<single impactful word used in the comments>",
-      "sentiment": "<either positive, negative, or mixed>"
-    },
-    ...
-  ],
-  "mood_signals": [
-    {
-      "mood": "<single mood like Excitement, Nostalgia, Disappointment, etc>",
-      "percentage": <integer from 0-100, estimating how strongly this mood is present in the comments>
-    },
-    ...
-  ],
-  "agreeability": "<either mostly_agrees, mostly_disagrees, mixed>",
-  "video_alignment": "<2-3 sentences describing where the audience aligns with the reviewer's opinion>"
-}
-
-Guidelines:
-- Focus on the comments' reactions. Highlight if they are agreeing/disagreeing with the review or adding their own opinion.
-- Extract 3-5 claims from the comments.
-- There should be a total of 10 expressive words in top_words, taken directly from the most common sentiment words in the transcript and comments
-- Extract exactly 5 moods for mood_signals, each scored individually.
-- In sentiment_breakdown, positive_pct, negative_pct, and neutral_pct should all sum to 100.
-"""
-
-VIDEO_PROMPT = """
-You are an expert movie analyst that specializes in intelligence from movie studios and streaming companies. You will be given two JSON
-analysis objects for a single YouTube video: a Transcript Analysis that focuses on what the video creator has said, and a Comments
-Analysis that focuses on how the audience reacted to the video. Your job is to combine these into a single unified report. Do not return
-anything else. Do not include any explanation or text outside of the JSON object. If a field cannot be determined from the provided data, 
-use null.
-
-You must return the following JSON structure exactly:
-
-{
-  "movie": "<name of the specific movie>",
-  "video_type": "<trailer or review>",
-  "key_takeaways": [
-    "<concise insight synthesized from both the video and audience reaction>",
-    ...
-  ],
-  "claims": [
-    {
-      "claim": "<specific factual or opinion statement made by the transcript and comments>",
-      "source": "<transcript or comment>",
-      "sentiment": "<either positive, negative, or mixed>"
-    },
-    ...
-  ],
-  "narratives": [
-    {
-      "title": "<specific narrative or theme>",
-      "summary": "<2-3 sentence description of the narrative emerging from public discourse>",
-      "supporting_claims": ["<claim1>", "<claim2>"],
-      "sentiment": "<either positive, negative, or mixed>"
-    },
-    ...
-  ],
-  "sentiment_breakdown": {
-    "overall_sentiment": "<either positive, negative, or mixed>",
-    "avg_sentiment_score": <number between -1.0 and 1.0>,
-    "positive_pct": <integer from 0-100>,
-    "negative_pct": <integer from 0-100>,
-    "neutral_pct": <integer from 0-100>,
-    "summary": "<1-2 sentences describing the overall tone of the reviewer>"
+    "summary": "<1-2 sentences describing the overall tone of the reviewer and audience>"
   },
   "top_words": [
     {
       "word": "<single impactful word from transcript or comments>",
-      "sentiment": "<either positive, negative, or mixed>"
+      "sentiment": "<either positive, negative, or mixed>",
+      "count": <integer of how often the word appears>
     },
     ...
   ],
@@ -249,15 +126,215 @@ You must return the following JSON structure exactly:
     "summary": "<2-3 sentences about what this reviewer's reception suggests about franchise or content strategy risk>"
   }
 }
-
+ 
 Guidelines:
-- Synthesize both sources, highlighting where the video and audience agree or disagree.
-- Extract 3-6 key takeaways, 4-8 combined claims, and 2-4 narratives.
-- audience_vs_video captures the difference between the video's message and public reaction.
-- There should be a total of 10 expressive words in top_words, taken directly from the most common sentiment words in the transcript and comments
+- Claims are factual statements or strong opinions. Narratives are high-level themes connecting multiple claims.
+- Focus claims on what the reviewer and commenters are actually saying about the film.
+- Extract 3-5 key takeaways, 4-6 claims, and 1-3 narratives.
 - Extract exactly 5 moods for mood_signals, each scored individually.
-- In sentiment_breakdown, positive_pct, negative_pct, and neutral_pct should all sum to 100.
+- Key takeaways should be points a studio executive may need to know about public reaction.
+- There should be a total of 10 expressive words in top_words.
+- In sentiment_breakdown, positive_pct, negative_pct, and neutral_pct should sum to 100.
 """
+
+# REVIEW_PROMPT = """
+# You are an expert movie analyst that specializes in intelligence from movie studios and streaming companies. You will be given data 
+# from a movie review video posted by an independent YouTube reviewer channel. This channel and its video are not associated with an
+# official movie studio and represent authentic public reaction of a movie or studio. This data will be in the form of the video transcript
+# and comments. Your job is to analyze this content and return a structured JSON object with insights. Do not return anything else. 
+# Do not include any explanation or text outside of the JSON object. If a field cannot be determined from the provided data, use null.
+
+# You must return the following JSON structure exactly:
+
+# {
+#   "movie": "<name of the specific movie being discussed>",
+#   "video_type": "review",
+#   "key_takeaways": [
+#     "<concise string about main topics from the review regarding the movie>",
+#     ...
+#   ],
+#   "claims": [
+#     {
+#       "claim": "<specific factual or opinion statement made by the reviewer or commenters>",
+#       "source": "<either transcript or comment>",
+#       "sentiment": "<either positive, negative, or neutral>"
+#     },
+#     ...
+#   ],
+#   "narratives": [
+#     {
+#       "title": "<specific narrative or theme>",
+#       "summary": "<2-3 sentence description of the narrative emerging from public discourse>",
+#       "supporting_claims": ["<claim1>", "<claim2>"],
+#       "sentiment": "<either positive, negative, or mixed>"
+#     },
+#     ...
+#   ],
+#   "sentiment_breakdown": {
+#     "overall_sentiment": "<either positive, negative, or mixed>",
+#     "avg_sentiment_score": <number between -1.0 and 1.0>,
+#     "positive_pct": <integer from 0-100>,
+#     "negative_pct": <integer from 0-100>,
+#     "neutral_pct": <integer from 0-100>,
+#     "summary": "<1-2 sentences describing the overall tone of the reviewer>"
+#   },
+#   "top_words": [
+#     {
+#       "word": "<single word drawn from transcripts>",
+#       "sentiment": "<either positive, negative, or mixed>",
+#       "count": <integer of how often the word appears>
+#     },
+#     ...
+#   ],
+#   "mood_signals": [
+#     {
+#       "mood": "<single mood like Excitement, Nostalgia, Disappointment, etc>",
+#       "percentage": <integer from 0-100, estimate how strongly this mood is present across reviews>
+#     },
+#     ...
+#   ],
+#   "creator_risk": {
+#     "risk_score": <integer from 1-10>,
+#     "risk_level": "<either low, moderate, or high>",
+#     "summary": "<2-3 sentences about what this reviewer's reception suggests about franchise or content strategy risk>"
+#   }
+# }
+
+# Guidelines:
+# - Claims are a factual statement made in the trailer. Narratives are high-level stories or themes connected by multiple claims.
+# - Focus claims on what the reviewer is actually saying about the film. Focus on their thoughts, feelings, and voice.
+# - Extract 3-5 key takeaways, 4-6 claims, and 1-3 narratives.
+# - Extract exactly 5 moods for mood_signals, each scored individually.
+# - Key takeaways should be points a studio executive may need to know about public reaction to the movie.
+# - There should be a total of 10 expressive words in top_words, taken directly from the most common sentiment words in the transcript
+# """
+
+# COMMENTS_PROMPT = """
+# You are an expert movie analyst that specializes in intelligence from movie studios and streaming companies. You will be given data
+# in the form of the JSON object with a YouTube video's transcript analysis and the comments on that video. These comments are not associated 
+# with an official movie studio and represent authentic public reaction of a movie or studio that the YouTube video is about. Your job is to 
+# analyze this content and return a structured JSON object with insights. Do not return anything else. Do not include any explanation or text 
+# outside of the JSON object. If a field cannot be determined from the provided data, use null.
+
+# You must return the following JSON structure exactly:
+
+# {
+#   "movie": "<name of the specific movie being discussed>",
+#   "claims": [
+#     {
+#       "claim": "<specific factual or opinion statement made by the comments>",
+#       "sentiment": "<either positive, negative, or neutral>"
+#     },
+#     ...
+#   ],
+#   "sentiment_breakdown": {
+#     "overall_sentiment": "<either positive, negative, or mixed>",
+#     "average_sentiment_score": <number between -1.0 and 1.0>,
+#     "positive_pct": <integer from 0-100>,
+#     "negative_pct": <integer from 0-100>,
+#     "neutral_pct": <integer from 0-100>,
+#     "summary": "<1-2 sentences describing the audience reaction to this video>"
+#   },
+#   "top_words": [
+#     {
+#       "word": "<single impactful word used in the comments>",
+#       "sentiment": "<either positive, negative, or mixed>"
+#     },
+#     ...
+#   ],
+#   "mood_signals": [
+#     {
+#       "mood": "<single mood like Excitement, Nostalgia, Disappointment, etc>",
+#       "percentage": <integer from 0-100, estimating how strongly this mood is present in the comments>
+#     },
+#     ...
+#   ],
+#   "agreeability": "<either mostly_agrees, mostly_disagrees, mixed>",
+#   "video_alignment": "<2-3 sentences describing where the audience aligns with the reviewer's opinion>"
+# }
+
+# Guidelines:
+# - Focus on the comments' reactions. Highlight if they are agreeing/disagreeing with the review or adding their own opinion.
+# - Extract 3-5 claims from the comments.
+# - There should be a total of 10 expressive words in top_words, taken directly from the most common sentiment words in the transcript and comments
+# - Extract exactly 5 moods for mood_signals, each scored individually.
+# - In sentiment_breakdown, positive_pct, negative_pct, and neutral_pct should all sum to 100.
+# """
+
+# VIDEO_PROMPT = """
+# You are an expert movie analyst that specializes in intelligence from movie studios and streaming companies. You will be given two JSON
+# analysis objects for a single YouTube video: a Transcript Analysis that focuses on what the video creator has said, and a Comments
+# Analysis that focuses on how the audience reacted to the video. Your job is to combine these into a single unified report. Do not return
+# anything else. Do not include any explanation or text outside of the JSON object. If a field cannot be determined from the provided data, 
+# use null.
+
+# You must return the following JSON structure exactly:
+
+# {
+#   "movie": "<name of the specific movie>",
+#   "video_type": "<trailer or review>",
+#   "key_takeaways": [
+#     "<concise insight synthesized from both the video and audience reaction>",
+#     ...
+#   ],
+#   "claims": [
+#     {
+#       "claim": "<specific factual or opinion statement made by the transcript and comments>",
+#       "source": "<transcript or comment>",
+#       "sentiment": "<either positive, negative, or mixed>"
+#     },
+#     ...
+#   ],
+#   "narratives": [
+#     {
+#       "title": "<specific narrative or theme>",
+#       "summary": "<2-3 sentence description of the narrative emerging from public discourse>",
+#       "supporting_claims": ["<claim1>", "<claim2>"],
+#       "sentiment": "<either positive, negative, or mixed>"
+#     },
+#     ...
+#   ],
+#   "sentiment_breakdown": {
+#     "overall_sentiment": "<either positive, negative, or mixed>",
+#     "avg_sentiment_score": <number between -1.0 and 1.0>,
+#     "positive_pct": <integer from 0-100>,
+#     "negative_pct": <integer from 0-100>,
+#     "neutral_pct": <integer from 0-100>,
+#     "summary": "<1-2 sentences describing the overall tone of the reviewer>"
+#   },
+#   "top_words": [
+#     {
+#       "word": "<single impactful word from transcript or comments>",
+#       "sentiment": "<either positive, negative, or mixed>"
+#     },
+#     ...
+#   ],
+#   "mood_signals": [
+#     {
+#       "mood": "<single mood like Excitement, Nostalgia, Disappointment, etc>",
+#       "percentage": <integer from 0-100>
+#     },
+#     ...
+#   ],
+#   "audience_vs_video": {
+#     "agreeability": "<either mostly_agrees, mostly_disagrees, mixed>",
+#     "video_alignment": "<2-3 sentences describing where the audience aligns with the reviewer's opinion>"
+#   },
+#   "creator_risk": {
+#     "risk_score": <integer from 1-10>,
+#     "risk_level": "<either low, moderate, or high>",
+#     "summary": "<2-3 sentences about what this reviewer's reception suggests about franchise or content strategy risk>"
+#   }
+# }
+
+# Guidelines:
+# - Synthesize both sources, highlighting where the video and audience agree or disagree.
+# - Extract 3-6 key takeaways, 4-8 combined claims, and 2-4 narratives.
+# - audience_vs_video captures the difference between the video's message and public reaction.
+# - There should be a total of 10 expressive words in top_words, taken directly from the most common sentiment words in the transcript and comments
+# - Extract exactly 5 moods for mood_signals, each scored individually.
+# - In sentiment_breakdown, positive_pct, negative_pct, and neutral_pct should all sum to 100.
+# """
 
 AGGREGATION_PROMPT = """
 You are an expert movie analyst that specializes in intelligence from movie studios and streaming companies. You will be given 
@@ -360,12 +437,23 @@ def clean_aggregation_input(trailer_result, review_results):
         cleaned_input += json.dumps(review, indent=4)
         
     return cleaned_input
+  
+def _build_video_input(transcript, comments):
+    comments_block = "\n".join(f"- {c}" for c in comments) if comments else "(no comments)"
+    return f"TRANSCRIPT:\n{transcript}\n\nVIEWER COMMENTS:\n{comments_block}"
+  
+def _build_aggregation_input(trailer_result, review_results):
+    parts = ["TRAILER INSIGHTS:\n" + json.dumps(trailer_result, indent=2)]
+    for i, review in enumerate(review_results, 1):
+        parts.append(f"REVIEW VIDEO {i} INSIGHTS:\n" + json.dumps(review, indent=2))
+    return "\n\n".join(parts)
 
 # defining llm model and message so don't have to repeat
 def _call_llm(system_prompt, user_content):
     response = client.chat.completions.create(
         # model="openai/gpt-oss-120b",
-        model = "llama-3.3-70b-versatile", # changed the model to handle more requests
+        model = "llama-3.3-70b-versatile", # using this for production
+        # model = "llama-3.1-8b-instant",  # using this for testing
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user",   "content": user_content},
@@ -431,17 +519,10 @@ def analyze_comments(transcript_result, comments):
 
 # analyzes a single video (either trailer or review) based on transcript + comments
 def analyze_video(transcript, comments, video_type):
-    transcript_result_raw = analyze_transcript(transcript, video_type)
-    transcript_result = _parse_json(transcript_result_raw, "transcript analysis")
-    
-    
-    comments_result_raw = analyze_comments(transcript_result, comments)
-    comments_result = _parse_json(comments_result_raw, "comments_analysis")
-
-    user_input = clean_video_input(transcript_result, comments_result)
-    raw = _call_llm(VIDEO_PROMPT, user_input)
-    
-    return _parse_json(raw, "video analysis")
+    system_prompt = TRAILER_PROMPT if video_type == "trailer" else REVIEW_PROMPT
+    user_input = _build_video_input(transcript, comments)
+    raw = _call_llm(system_prompt, user_input)
+    return _parse_json(raw, f"{video_type} analysis")
 
     # response = client.chat.completions.create(
     #     model="openai/gpt-oss-120b",
@@ -488,7 +569,7 @@ def run_llm(trailer, reviews):
 
     # analyze reviews
     review_results = []
-    for i, review in enumerate(reviews, 1):
+    for i, review in enumerate(reviews[:3], 1):
         print(f"Analyzing Review Video {i}")
         review_result = analyze_video(review["transcript"], review["comments"], "review")
         review_results.append(review_result)
@@ -502,19 +583,27 @@ def run_llm(trailer, reviews):
 # running pipeline from db data and inserting llm result into db
 def run_llm_for_movie(run_id, movie_id):
     print(f"Loading data for movie {movie_id}...")
-    trailer, reviews = get_movie_data_for_llm(movie_id)
+    trailer, reviews = get_movie_data_for_llm(movie_id)  # uses its own short-lived conn
     print(f"  Found trailer + {len(reviews)} review(s)")
- 
-    result = run_llm(trailer, reviews)
- 
+
+    result = run_llm(trailer, reviews[:3])  # all LLM work happens here, no DB conn held
+
     print("Saving to DB...")
-    load_llm_output(run_id, movie_id, result)
+    load_llm_output(run_id, movie_id, result)  # fresh conn opened only now
     return result
   
 # main   
 if __name__ == "__main__":
-    RUN_ID   = "26d2d07a-9dcd-4777-acf0-e338251b039b"
-    MOVIE_ID = "94c045de-0426-423f-b22a-fd13c9c0e23c"
+    # RUN_ID   = "26d2d07a-9dcd-4777-acf0-e338251b039b"
+    # MOVIE_ID = "94c045de-0426-423f-b22a-fd13c9c0e23c"
+    
+    MOVIE_ID = get_movie_id_from_title("Deadpool & Wolverine")
+    STUDIO_ID = get_studio_id_from_movie_id(MOVIE_ID)
+    
+    conn = get_conn()
+    RUN_ID = insert_insight_run(conn.cursor(), STUDIO_ID)
+    conn.commit()
+    conn.close()
  
     result = run_llm_for_movie(RUN_ID, MOVIE_ID)
     print("Final aggregated analysis:")

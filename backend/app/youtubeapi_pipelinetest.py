@@ -45,7 +45,7 @@ DEVELOPER_KEY3 = os.getenv("YOUTUBE_API_KEY_3")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 TMDB_API_KEY    = os.getenv("TMDB_API_KEY")
 
-youtube_object = build("youtube", "v3", developerKey=DEVELOPER_KEY1)
+youtube_object = build("youtube", "v3", developerKey=DEVELOPER_KEY2)
 #client = genai.Client(api_key=GEMINI_API_KEY)
 client = Groq(api_key=GROQ_API_KEY)
 
@@ -133,7 +133,7 @@ def get_movie_release_date(movie_title):
 # TRANSCRIBE FUNCTIONS:   
     
 GROQ_MAX_FILE_MB = 24 # limit is 25MB 
-GROQ_MAX_SECONDS = 20 * 60  # making it 20 mins max so that way I don't go over limit
+GROQ_MAX_SECONDS = 10 * 60  # making it 10 mins max so that way I don't go over limit
 TRANSCRIBE_SLEEP = 30 # so I don't overload groq
 
 # getting audio file length
@@ -390,85 +390,170 @@ def get_uploads_playlist_id(channel_id):
         raise RuntimeError(f"Channel not found: {channel_id}")
     return items[0]["contentDetails"]["relatedPlaylists"]["uploads"]
 
-# helper function (for Phase 0) to get latest trailers from channel uploads playlist
-def get_latest_trailers_from_channel(channel_id, limit=5, max_scan=200): # see if I have to increase max_scan to guarantee 5 trailers
-    print(f"  Fetching uploads playlist for channel {channel_id}...")
-    playlist_id = get_uploads_playlist_id(channel_id)
+# # helper function (for Phase 0) to get latest trailers from channel uploads playlist
+# def get_latest_trailers_from_channel(channel_id, limit=5, max_scan=200): # see if I have to increase max_scan to guarantee 5 trailers
+#     print(f"  Fetching uploads playlist for channel {channel_id}...")
+#     playlist_id = get_uploads_playlist_id(channel_id)
 
-    # Step 1: collect video IDs from uploads playlist
-    video_ids = []
-    page_token = None
-    while len(video_ids) < max_scan:
-        result = youtube_object.playlistItems().list(
-            part="contentDetails",
-            playlistId=playlist_id,
-            maxResults=50,
-            pageToken=page_token
+#     # Step 1: collect video IDs from uploads playlist
+#     video_ids = []
+#     page_token = None
+#     while len(video_ids) < max_scan:
+#         result = youtube_object.playlistItems().list(
+#             part="contentDetails",
+#             playlistId=playlist_id,
+#             maxResults=50,
+#             pageToken=page_token
+#         ).execute()
+#         use_quota(1, "playlistItems.list")
+
+#         for item in result.get("items", []):
+#             vid = item["contentDetails"].get("videoId")
+#             if vid:
+#                 video_ids.append(vid)
+#         page_token = result.get("nextPageToken")
+#         if not page_token:
+#             break
+
+#     print(f"  Scanned {len(video_ids)} uploads, fetching details...")
+
+#     # Step 2: fetch video details in batches of 50
+#     trailers = []
+#     seen_titles = set()
+#     today = datetime.today().strftime("%Y-%m-%d")
+
+#     for i in range(0, len(video_ids), 50):
+#         if len(trailers) >= limit:
+#             break
+
+#         batch = video_ids[i:i + 50]
+#         result = youtube_object.videos().list(
+#             part="snippet,statistics,contentDetails",
+#             id=",".join(batch)
+#         ).execute()
+#         use_quota(1, f"videos.list (batch {i//50 + 1})")
+
+#         for item in result.get("items", []):
+#             title = item["snippet"]["title"]
+#             print(f"  Scanning: '{title}'")  # add this
+#             title_lower = title.lower()
+    
+#             # Skip anything that doesn't look like a trailer
+#             if not any(kw in title_lower for kw in ["trailer", "teaser"]):
+#                 continue
+            
+#             movie_title = normalize_title(title)
+#             if not movie_title or movie_title in seen_titles:
+#                 continue
+
+#             # Check TMDB for release date — skip unreleased movies
+#             release_date = get_movie_release_date(movie_title)
+#             if not release_date:
+#                 print(f"  Skipping '{movie_title}' — not found on TMDB")
+#                 continue
+#             if release_date > today:
+#                 print(f"  Skipping '{movie_title}' — releases {release_date} (not yet out)")
+#                 continue
+
+#             seen_titles.add(movie_title)
+#             trailers.append({
+#                 "movie_title": movie_title,
+#                 "video_id": item["id"],
+#                 "title": title,
+#                 "channel_id": item["snippet"]["channelId"],
+#                 "channel_title": item["snippet"]["channelTitle"],
+#                 "published_at": item["snippet"]["publishedAt"][:10],
+#                 "published_at_full": item["snippet"]["publishedAt"],
+#                 "description": item["snippet"]["description"],
+#                 "views": int(item["statistics"].get("viewCount", 0)),
+#                 "likes": int(item["statistics"].get("likeCount", 0)),
+#                 "comment_count": int(item["statistics"].get("commentCount", 0)),
+#                 "tags": item["snippet"].get("tags"),
+#                 "category_id": item["snippet"].get("categoryId"),
+#                 "default_language": item["snippet"].get("defaultLanguage"),
+#                 "caption": item.get("contentDetails", {}).get("caption") == "true",
+#             })
+
+#             if len(trailers) >= limit:
+#                 break
+
+#     return trailers
+
+def get_latest_trailers_from_channel(channel_id, limit=5, max_scan=200):
+    print(f"  Searching for trailers on channel {channel_id}...")
+
+    # Run two searches — date for recency, relevance for well-known trailers
+    candidate_ids = []
+    seen = set()
+
+    for order in ["date", "relevance"]:
+        result = youtube_object.search().list(
+            q="official trailer movie",
+            part="id,snippet",
+            type="video",
+            channelId=channel_id,
+            maxResults=25,
+            order=order
         ).execute()
-        use_quota(1, "playlistItems.list")
-
+        use_quota(100, f"search.list (channel trailers {order})")
         for item in result.get("items", []):
-            vid = item["contentDetails"].get("videoId")
-            if vid:
-                video_ids.append(vid)
-        page_token = result.get("nextPageToken")
-        if not page_token:
-            break
+            vid = item["id"]["videoId"]
+            if vid not in seen:
+                seen.add(vid)
+                candidate_ids.append(vid)
 
-    print(f"  Scanned {len(video_ids)} uploads, fetching details...")
+    if not candidate_ids:
+        print(f"  No trailer candidates found")
+        return []
 
-    # Step 2: fetch video details in batches of 50
+    # Fetch full details for all candidates in one batch
+    result = youtube_object.videos().list(
+        part="snippet,statistics,contentDetails",
+        id=",".join(candidate_ids)
+    ).execute()
+    use_quota(1, "videos.list (trailer candidates)")
+
     trailers = []
     seen_titles = set()
     today = datetime.today().strftime("%Y-%m-%d")
 
-    for i in range(0, len(video_ids), 50):
+    for item in result.get("items", []):
         if len(trailers) >= limit:
             break
 
-        batch = video_ids[i:i + 50]
-        result = youtube_object.videos().list(
-            part="snippet,statistics,contentDetails",
-            id=",".join(batch)
-        ).execute()
-        use_quota(1, f"videos.list (batch {i//50 + 1})")
+        title = item["snippet"]["title"]
+        print(f"  Scanning: '{title}'")
 
-        for item in result.get("items", []):
-            title = item["snippet"]["title"]
-            movie_title = normalize_title(title)
-            if not movie_title or movie_title in seen_titles:
-                continue
+        movie_title = normalize_title(title)
+        if not movie_title or movie_title in seen_titles:
+            continue
 
-            # Check TMDB for release date — skip unreleased movies
-            release_date = get_movie_release_date(movie_title)
-            if not release_date:
-                print(f"  Skipping '{movie_title}' — not found on TMDB")
-                continue
-            if release_date > today:
-                print(f"  Skipping '{movie_title}' — releases {release_date} (not yet out)")
-                continue
+        release_date = get_movie_release_date(movie_title)
+        if not release_date:
+            print(f"  Skipping '{movie_title}' — not found on TMDB")
+            continue
+        if release_date > today:
+            print(f"  Skipping '{movie_title}' — releases {release_date} (not yet out)")
+            continue
 
-            seen_titles.add(movie_title)
-            trailers.append({
-                "movie_title": movie_title,
-                "video_id": item["id"],
-                "title": title,
-                "channel_id": item["snippet"]["channelId"],
-                "channel_title": item["snippet"]["channelTitle"],
-                "published_at": item["snippet"]["publishedAt"][:10],
-                "published_at_full": item["snippet"]["publishedAt"],
-                "description": item["snippet"]["description"],
-                "views": int(item["statistics"].get("viewCount", 0)),
-                "likes": int(item["statistics"].get("likeCount", 0)),
-                "comment_count": int(item["statistics"].get("commentCount", 0)),
-                "tags": item["snippet"].get("tags"),
-                "category_id": item["snippet"].get("categoryId"),
-                "default_language": item["snippet"].get("defaultLanguage"),
-                "caption": item.get("contentDetails", {}).get("caption") == "true",
-            })
-
-            if len(trailers) >= limit:
-                break
+        seen_titles.add(movie_title)
+        trailers.append({
+            "movie_title": movie_title,
+            "video_id": item["id"],
+            "title": title,
+            "channel_id": item["snippet"]["channelId"],
+            "channel_title": item["snippet"]["channelTitle"],
+            "published_at": item["snippet"]["publishedAt"][:10],
+            "published_at_full": item["snippet"]["publishedAt"],
+            "description": item["snippet"]["description"],
+            "views": int(item["statistics"].get("viewCount", 0)),
+            "likes": int(item["statistics"].get("likeCount", 0)),
+            "comment_count": int(item["statistics"].get("commentCount", 0)),
+            "tags": item["snippet"].get("tags"),
+            "category_id": item["snippet"].get("categoryId"),
+            "default_language": item["snippet"].get("defaultLanguage"),
+            "caption": item.get("contentDetails", {}).get("caption") == "true",
+        })
 
     return trailers
 
@@ -645,7 +730,7 @@ def phase2_insert_reviews(movie_id, movie_name, studio_channel_id):
     candidate_ids = []
     seen = set()
     for template in REVIEW_QUERY_TEMPLATES:
-        query = template.format(title=movie_name)
+        query = template.format(title=f"'{movie_name}'")
         result = youtube_object.search().list(
             q=query,
             part="id,snippet",
@@ -881,7 +966,8 @@ def run_pipeline(studio):
 if __name__ == "__main__":
     # studio = {"name": "Paramount Pictures", "id": "f5cfdff5-13a5-47a3-a7e9-51416f44ee33"}
     # studio = {"name": "Sony Pictures Entertainment", "id": "aa40a97c-fc5b-40cf-8b36-79719e630b93"}
-    studio = {"name": "A24", "id": "860c981b-4b3a-4e37-b7d9-560da40cfce4"}
+    # studio = {"name": "A24", "id": "860c981b-4b3a-4e37-b7d9-560da40cfce4"}
+    studio = {"name": "Marvel Studios", "id": "11111111-1111-1111-1111-111111111111"}
     run_pipeline(studio)
 
     # tests the transcription function with a sample YouTube video URL (replace with an actual trailer URL for real testing)

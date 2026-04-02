@@ -1,14 +1,15 @@
 import json
+import os
+from pathlib import Path
 import psycopg2
 import psycopg2.extras
+from dotenv import load_dotenv
 
-conn = psycopg2.connect(
-    database="yip",
-    user="postgres",
-    password="postgres",
-    host="localhost",
-    port=5434
-)
+load_dotenv(dotenv_path=Path(__file__).parent.parent.parent / ".env")
+DB_URL = os.getenv("DATABASE_URL")
+
+def get_conn():
+    return psycopg2.connect(DB_URL)
 
 # call after running llm to update its run status
 def update_run_status(cursor, runid, status, error = None):
@@ -106,6 +107,7 @@ def insert_movie_analytics_snapshot(cursor, movieid, result, total_views=None, t
     ))
 
 def load_llm_output(runid, movieid, result):
+    conn = get_conn()  # fresh connection, called AFTER all LLM work is done
     try:
         cursor = conn.cursor()
         
@@ -137,61 +139,98 @@ def load_llm_output(runid, movieid, result):
     
 # getting transcript, videoid, movieid, comments
 def get_movie_data_for_llm(movie_id):
-    cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-
-    # Step 1: get all videos for this movie
-    cursor.execute("""
-        SELECT v.videoid, v.videorole, t.fulltext AS transcript
-        FROM ytvideos v
-        LEFT JOIN ytvideotranscripts t
-            ON t.videoid = v.videoid
-        WHERE v.movieid = %s
-          AND v.videorole IN ('official_trailer', 'review')
-        ORDER BY
-            CASE v.videorole WHEN 'official_trailer' THEN 0 ELSE 1 END,
-            v.publishedat ASC
-    """, (movie_id,))
-    videos = cursor.fetchall()
-
-    if not videos:
-        raise ValueError(f"No videos found for movie_id: {movie_id}")
-
-    # Step 2: for each video, fetch its comments
-    def get_comments(video_id):
+    conn = get_conn()
+    try:
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
         cursor.execute("""
-            SELECT text FROM ytcomments
-            WHERE videoid = %s
-            ORDER BY likecount DESC, publishedat DESC
-            LIMIT 100
-        """, (video_id,))
-        return [row["text"] for row in cursor.fetchall()]
+            SELECT v.videoid, v.videorole, t.fulltext AS transcript
+            FROM ytvideos v
+            LEFT JOIN ytvideotranscripts t ON t.videoid = v.videoid
+            WHERE v.movieid = %s
+              AND v.videorole IN ('official_trailer', 'review')
+            ORDER BY
+                CASE v.videorole WHEN 'official_trailer' THEN 0 ELSE 1 END,
+                v.publishedat ASC
+        """, (movie_id,))
+        videos = cursor.fetchall()
 
-    # Step 3: assemble into trailer + reviews shape
-    trailer = None
-    reviews = []
+        if not videos:
+            raise ValueError(f"No videos found for movie_id: {movie_id}")
 
-    for video in videos:
-        video_id   = video["videoid"]
-        video_role = video["videorole"]
-        transcript = video["transcript"]  # may be None if not yet transcribed
+        def get_comments(video_id):
+            cursor.execute("""
+                SELECT text FROM ytcomments
+                WHERE videoid = %s
+                ORDER BY likecount DESC, publishedat DESC
+                LIMIT 100
+            """, (video_id,))
+            return [row["text"] for row in cursor.fetchall()]
 
-        if not transcript:
-            print(f"  Warning: no transcript for video {video_id} ({video_role}), skipping")
-            continue
+        trailer = None
+        reviews = []
+        for video in videos:
+            video_id   = video["videoid"]
+            video_role = video["videorole"]
+            transcript = video["transcript"]
+            if not transcript:
+                print(f"  Warning: no transcript for video {video_id} ({video_role}), skipping")
+                continue
+            entry = {"transcript": transcript, "comments": get_comments(video_id)}
+            if video_role == "official_trailer" and trailer is None:
+                trailer = entry
+            elif video_role == "review":
+                reviews.append(entry)
 
-        entry = {
-            "transcript": transcript,
-            "comments":   get_comments(video_id),
-        }
+        if not trailer:
+            raise ValueError(f"No trailer with transcript found for movie_id: {movie_id}")
+        if not reviews:
+            raise ValueError(f"No review videos with transcripts found for movie_id: {movie_id}")
 
-        if video_role == "official_trailer" and trailer is None:
-            trailer = entry
-        elif video_role == "review":
-            reviews.append(entry)
+        return trailer, reviews
+    finally:
+        conn.close()
 
-    if not trailer:
-        raise ValueError(f"No trailer with transcript found for movie_id: {movie_id}")
-    if not reviews:
-        raise ValueError(f"No review videos with transcripts found for movie_id: {movie_id}")
+# helper method for getting movie_id from movie_title
+def get_movie_id_from_title(movie_title):
+    conn = get_conn()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("""
+                SELECT movieid FROM movies
+                WHERE title = %s
+                ORDER BY releasedate DESC NULLS LAST
+                LIMIT 1
+            """, (movie_title,))
+            result = cursor.fetchone()
+            if result:
+                return result[0]
+            else:
+                raise ValueError(f"No movie found with title: {movie_title}")
+    finally:
+        conn.close()
 
-    return trailer, reviews
+def insert_insight_run(cursor, studioid):
+    cursor.execute("""
+        INSERT INTO insightruns (studioid, status)
+        VALUES (%s, 'running')
+        RETURNING runid
+    """, (studioid,))
+    result = cursor.fetchone()
+    return result[0] if result else None
+
+
+# helper method for getting studio_id from movie_id
+def get_studio_id_from_movie_id(movie_id):
+    conn = get_conn()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("""
+                SELECT studioid FROM movies WHERE movieid = %s
+            """, (movie_id,))
+            result = cursor.fetchone()
+            if result:
+                return result[0]
+            else:
+                raise ValueError(f"No movie found with id: {movie_id}")
+    finally:
+        conn.close()
