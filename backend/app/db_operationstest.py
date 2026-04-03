@@ -1,13 +1,12 @@
+from anyio import Path
 import psycopg2
 import psycopg2.extras
+import os
+from dotenv import load_dotenv
 
-conn = psycopg2.connect(
-    database="yip",
-    user="postgres",
-    password="postgres",
-    host="localhost",
-    port=5434
-)
+load_dotenv(dotenv_path=Path(__file__).parent.parent.parent / ".env")
+
+conn = psycopg2.connect(os.getenv("DATABASE_URL"))
 
 
 def insert_yt_channel(cursor, channelid, channeltitle, country):
