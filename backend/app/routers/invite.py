@@ -29,12 +29,12 @@ async def create_invite(payload: InviteCreateRequest, current_user=Depends(get_c
         raise HTTPException(status_code=403, detail="Only admins can send invites")
 
     membership_data = membership_docs[0].to_dict()
-    studio_id = membership_data["studioId"]
+    postgres_studio_id = membership_data["postgresStudioId"]
 
     existing_invites = (
         db.collection("invitations")
         .where("email", "==", normalized_email)
-        .where("studioId", "==", studio_id)
+        .where("postgresStudioId", "==", postgres_studio_id)
         .where("status", "in", ["sent", "pending"])
         .limit(1)
         .stream()
@@ -52,7 +52,7 @@ async def create_invite(payload: InviteCreateRequest, current_user=Depends(get_c
 
     invite_ref.set({
         "email": normalized_email,
-        "studioId": studio_id,
+        "postgresStudioId": postgres_studio_id,
         "role": payload.role,
         "invitedByUid": uid,
         "status": "sent",
@@ -70,14 +70,14 @@ async def create_invite(payload: InviteCreateRequest, current_user=Depends(get_c
         to_email=normalized_email,
         invite_link=invite_link,
         role=payload.role,
-        studio_id=studio_id
+        studio_id=postgres_studio_id
     )
 
     db.collection("audit_logs").document().set({
         "action": "invite_sent",
         "actorUid": uid,
         "actorEmail": inviter_email,
-        "studioId": studio_id,
+        "postgresStudioId": postgres_studio_id,
         "targetEmail": normalized_email,
         "createdAt": firestore.SERVER_TIMESTAMP,
     })
@@ -119,7 +119,7 @@ async def validate_invite(token: str = Query(...), email: str = Query(...)):
         "ok": True,
         "email": invite_data["email"],
         "role": invite_data["role"],
-        "studioId": invite_data["studioId"],
+        "postgresStudioId": invite_data["postgresStudioId"],
     }
     
 @router.post("/accept")
@@ -167,10 +167,10 @@ async def accept_invite(payload: InviteAcceptRequest):
         "lastLoginAt": None,
     }, merge=True)
 
-    membership_doc_id = f"{invite_data['studioId']}_{uid}"
+    membership_doc_id = f"{invite_data['postgresStudioId']}_{uid}"
 
     db.collection("studio_memberships").document(membership_doc_id).set({
-        "studioId": invite_data["studioId"],
+    "postgresStudioId": invite_data["postgresStudioId"],
         "firebaseUid": uid,
         "email": normalized_email,
         "role": invite_data["role"],
@@ -190,7 +190,7 @@ async def accept_invite(payload: InviteAcceptRequest):
     db.collection("audit_logs").document().set({
         "action": "invite_accepted",
         "actorUid": uid,
-        "studioId": invite_data["studioId"],
+        "postgresStudioId": invite_data["postgresStudioId"],
         "targetEmail": normalized_email,
         "createdAt": firestore.SERVER_TIMESTAMP,
     })
