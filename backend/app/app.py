@@ -3,10 +3,9 @@ import json
 import re
 from groq import Groq
 from dotenv import load_dotenv
-load_dotenv()
 
 from db_routes import get_conn, load_llm_output, get_movie_data_for_llm, get_movie_id_from_title, get_studio_id_from_movie_id, insert_insight_run
-
+load_dotenv()
 
 GROQ_LLM_API_KEY = os.getenv("GROQ_LLM_API_KEY")
 

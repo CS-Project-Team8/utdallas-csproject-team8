@@ -21,7 +21,6 @@ import requests
 from dotenv import load_dotenv
 import os
 from pathlib import Path
-load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
 
 # imports for DB operations
 from db_operationstest import (
@@ -36,6 +35,8 @@ from db_operationstest import (
     insert_transcript,
     insert_movie_poster
 )
+
+load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
 
 # keys and client setup
 DEVELOPER_KEY1 = os.getenv("YOUTUBE_API_KEY_1")
