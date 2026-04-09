@@ -87,7 +87,7 @@ export default function StudioDashboard() {
   const [restoreKey, setRestoreKey] = useState(0);
   const studioId = params?.studioId as string;
   const apiBaseUrl =
-      (process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8010").replace(/\/+$/, "");
+      (process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000").replace(/\/+$/, "");
 
   useEffect(() => {
     const handlePageShow = () => {

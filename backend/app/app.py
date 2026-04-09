@@ -27,12 +27,14 @@ You must return the following JSON structure exactly:
     ...
   ],
   "claims": [
-    {
-      "claim": "<specific statement or message made by the trailer>",
-      "source": "<either transcript or comment>",
-      "sentiment": "<either positive, negative, or neutral>"       
-    },
-    ...
+  {
+    "claim": "<specific factual or opinion statement>",
+    "source": "<either transcript or comment>",
+    "sentiment": "<either positive, negative, or neutral>",
+    "verdict": "<one of: verified, disputed, misleading, unverified>",
+    "risk_level": "<one of: low, mid, high>"
+  },
+  ...
   ],
   "narratives": [
     {
@@ -58,6 +60,8 @@ Guidelines:
 - Extract 3-5 key takeaways, 4-6 claims, and 1-3 narratives.
 - Sentiment breakdown should reflect the viewers' reaction through comments, NOT the trailer itself.
 - Key takeaways should be actionable for a studio executive reviewing their own promotions.
+- verdict should reflect whether the claim is factually supported (verified), contested by other sources (disputed), potentially misleading (misleading), or cannot be determined (unverified). 
+- risk_level should reflect reputational risk to the studio: low for positive/neutral verified claims, mid for disputed claims, high for misleading or highly negative claims.
 """
 
 # had to combine Review_prompt, Comments_prompt, and Video_prompt into one since groq was having trouble with parsing multiple prompts
@@ -77,13 +81,15 @@ You must return the following JSON structure exactly:
     ...
   ],
   "claims": [
-    {
-      "claim": "<specific factual or opinion statement made by the reviewer or commenters>",
-      "source": "<either transcript or comment>",
-      "sentiment": "<either positive, negative, or neutral>"
-    },
-    ...
-  ],
+  {
+    "claim": "<specific factual or opinion statement>",
+    "source": "<either transcript or comment>",
+    "sentiment": "<either positive, negative, or neutral>",
+    "verdict": "<one of: verified, disputed, misleading, unverified>",
+    "risk_level": "<one of: low, mid, high>"
+  },
+  ...
+],
   "narratives": [
     {
       "title": "<specific narrative or theme>",
@@ -135,6 +141,8 @@ Guidelines:
 - Key takeaways should be points a studio executive may need to know about public reaction.
 - There should be a total of 10 expressive words in top_words.
 - In sentiment_breakdown, positive_pct, negative_pct, and neutral_pct should sum to 100.
+- verdict should reflect whether the claim is factually supported (verified), contested by other sources (disputed), potentially misleading (misleading), or cannot be determined (unverified). 
+- risk_level should reflect reputational risk to the studio: low for positive/neutral verified claims, mid for disputed claims, high for misleading or highly negative claims.
 """
 
 AGGREGATION_PROMPT = """
@@ -161,6 +169,16 @@ You must return the following JSON structure exactly:
     },
     ...
   ],
+  "claims": [
+  {
+    "claim": "<specific factual or opinion statement>",
+    "source": "<either transcript or comment>",
+    "sentiment": "<either positive, negative, or neutral>",
+    "verdict": "<one of: verified, disputed, misleading, unverified>",
+    "risk_level": "<one of: low, mid, high>"
+  },
+  ...
+],
   "sentiment_breakdown": {
     "overall_sentiment": "<either positive, negative, or mixed>",
     "avg_sentiment_score": <number between -1.0 and 1.0>,
@@ -197,6 +215,8 @@ Guidelines:
 - Key takeaways and creator_risk should be points a studio executive may need to know about overall reception of the movie.
 - There should be a total of 10 words in top_words, based on the most common words that appear across videos and comments
 - In sentiment_breakdown, positive_pct, negative_pct, and neutral_pct should all sum to 100
+- verdict should reflect whether the claim is factually supported (verified), contested by other sources (disputed), potentially misleading (misleading), or cannot be determined (unverified). 
+- risk_level should reflect reputational risk to the studio: low for positive/neutral verified claims, mid for disputed claims, high for misleading or highly negative claims.
 """
 
 # also need to clean input given to aggregation prompt

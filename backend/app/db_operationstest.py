@@ -97,4 +97,28 @@ def insert_transcript(cursor, videoid, language, source, fulltext):
         INSERT INTO ytvideotranscripts (videoid, language, source, fulltext)
         VALUES (%s, %s, %s, %s)
         ON CONFLICT (videoid, language, fetchedat) DO NOTHING
-    """, (videoid, language, source, fulltext))    
+    """, (videoid, language, source, fulltext))  
+    
+def insert_engaged_review_videos(cursor, movieid):
+    cursor.execute("""
+        INSERT INTO movieengagedreviewvideos (movieid, videoid, rank, views, likes, comments, engagementrate)
+        SELECT
+            v.movieid,
+            v.videoid,
+            ROW_NUMBER() OVER (ORDER BY ms.viewcount DESC) as rank,
+            ms.viewcount,
+            ms.likecount,
+            ms.commentcount,
+            CASE 
+                WHEN ms.viewcount > 0 
+                THEN (COALESCE(ms.likecount, 0) + COALESCE(ms.commentcount, 0))::float / ms.viewcount
+                ELSE 0
+            END as engagementrate
+        FROM ytvideos v
+        JOIN ytvideometricsnapshots ms ON v.videoid = ms.videoid
+        WHERE v.movieid = %s
+          AND v.videorole = 'review'
+        ORDER BY ms.viewcount DESC
+        LIMIT 5
+        ON CONFLICT (movieid, computedat, rank) DO NOTHING
+    """, (movieid,))  

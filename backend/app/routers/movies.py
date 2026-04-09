@@ -107,15 +107,17 @@ def get_movie_trends(studio_id: UUID, movie_id: UUID):
                        """)
 
     topics_sql = text("""
-                      SELECT
-                          topiclabel,
-                          pct,
-                          keywords,
-                          summary
-                      FROM moviediscussiontopics
-                      WHERE movieid = :movie_id
-                      ORDER BY computedat DESC, pct DESC
-                      """)
+                    SELECT
+                        label,
+                        summary,
+                        sentimentavg,
+                        volume,
+                        consensusscore,
+                        controversyscore
+                    FROM movietopics
+                    WHERE movieid = :movie_id
+                    ORDER BY createdat DESC
+                """)
 
     payload_sql = text("""
                        SELECT

@@ -43,6 +43,29 @@ def insert_movie_topics(cursor, runid, movieid, result):
             INSERT INTO movietopics (runid, movieid, label, summary, sentimentavg)
             VALUES (%s, %s, %s, %s, %s)
         """, (runid, movieid, narrative.get("title", ""), narrative.get("summary", ""), sentiment_avg))
+        
+def insert_movie_claims(cursor, movieid, result):
+    claims = result.get("claims", [])
+    
+    for claim in claims:
+        verdict = claim.get("verdict", "unverified")
+        risk_level = claim.get("risk_level")
+        
+        # validate against allowed values
+        if verdict not in ("verified", "disputed", "misleading", "unverified"):
+            verdict = "unverified"
+        if risk_level not in ("low", "mid", "high"):
+            risk_level = None
+
+        cursor.execute("""
+            INSERT INTO movieclaims (movieid, claimtext, verdict, risklevel)
+            VALUES (%s, %s, %s, %s)
+        """, (
+            movieid,
+            claim.get("claim", ""),
+            verdict,
+            risk_level
+        ))
 
 def insert_insights_payload(cursor, runid, movieid, result):
     cursor.execute("""
@@ -112,6 +135,9 @@ def load_llm_output(runid, movieid, result):
 
         print("Saving movie topics")
         insert_movie_topics(cursor, runid, movieid, result)
+        
+        print("Saving claims")
+        insert_movie_claims(cursor, movieid, result)
 
         print("Saving insight payload")
         insert_insights_payload(cursor, runid, movieid, result)
