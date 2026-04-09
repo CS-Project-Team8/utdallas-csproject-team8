@@ -305,7 +305,7 @@ def insert_movie_sentiment_timeline(cursor, movieid, result):
 
 def insert_movie_discussion_topics(cursor, runid, movieid, result):
     for narrative in result.get("top_narratives", []):
-        sentiment_map = {"positive": 1.0, "negative": -1.0, "mixed": 0.0}
+        # sentiment_map = {"positive": 1.0, "negative": -1.0, "mixed": 0.0}
         narratives = result.get("top_narratives", [])
         pct = 1.0 / max(len(narratives), 1)
         cursor.execute("""
