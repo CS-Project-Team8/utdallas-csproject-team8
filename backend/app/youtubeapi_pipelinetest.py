@@ -21,6 +21,7 @@ import requests
 from dotenv import load_dotenv
 import os
 from pathlib import Path
+load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
 
 # imports for DB operations
 from db_operationstest import (
@@ -32,12 +33,11 @@ from db_operationstest import (
     insert_yt_comment,
     insert_movie,
     insert_movie_metric_snapshot,
-    insert_transcript
+    insert_transcript,
+    insert_movie_poster
 )
 
 # keys and client setup
-load_dotenv(dotenv_path=Path(__file__).parent.parent.parent / ".env")
-
 DEVELOPER_KEY1 = os.getenv("YOUTUBE_API_KEY_1")
 DEVELOPER_KEY2 = os.getenv("YOUTUBE_API_KEY_2")
 DEVELOPER_KEY3 = os.getenv("YOUTUBE_API_KEY_3")
@@ -129,6 +129,21 @@ def get_movie_release_date(movie_title):
     release_date = results[0].get("release_date")
     return release_date if release_date else None
       
+def get_tmdb_canonical_title(movie_title):
+    try:
+        response = requests.get(
+            "https://api.themoviedb.org/3/search/movie",
+            params={
+                "api_key": TMDB_API_KEY,
+                "query": movie_title
+            }
+        ).json()
+        results = response.get("results", [])
+        if results:
+            return results[0].get("title", movie_title)
+    except Exception as e:
+        print(f"  Could not fetch TMDB title for '{movie_title}': {e}")
+    return movie_title  # fallback to original if anything goes wrong
     
 # TRANSCRIBE FUNCTIONS:   
     
@@ -621,6 +636,7 @@ def phase1_insert_movies(studio_id, studio_name, trailers):
         movie_name = trailer["movie_title"]
         published_at = trailer["published_at"]
 
+        movie_name = get_tmdb_canonical_title(movie_name)
         print(f"\n  Inserting: {movie_name} ({published_at})")
 
         # Capture a single timestamp to use for both metric snapshot inserts in this batch
@@ -912,6 +928,41 @@ def phase2_insert_reviews(movie_id, movie_name, studio_channel_id):
         conn.rollback()
         print(f"  Error saving movie metric snapshot: {e}")
 
+# PHASE 3: for each movie, find the pster using TMDB API call
+
+def phase3_insert_posters(movie_id, movie_name):
+    print(f"\n{'='*60}")
+    print(f"PHASE 3: Finding poster for {movie_name}")
+    print(f"{'='*60}")
+
+    try:
+        response = requests.get(
+            "https://api.themoviedb.org/3/search/movie",
+            params={
+                "api_key": TMDB_API_KEY,
+                "query": movie_name
+            }
+        ).json()
+
+        results = response.get("results", [])
+        if not results:
+            print(f"  No TMDB entry found for {movie_name}")
+            return
+
+        poster_path = results[0].get("poster_path")
+        if not poster_path:
+            print(f"  No poster found on TMDB for {movie_name}")
+            return
+
+        poster_url = f"https://image.tmdb.org/t/p/w500{poster_path}"
+        with conn.cursor() as cur:
+            insert_movie_poster(cur, movie_id, poster_url)
+        conn.commit()
+        print(f"  Saved poster for {movie_name}")
+
+    except Exception as e:
+        conn.rollback()
+        print(f"  Error fetching/saving poster: {e}")
 
 # RUNNING PIPELINE
 
@@ -951,6 +1002,11 @@ def run_pipeline(studio):
         for movie_id, movie_name in movie_ids:
             phase2_insert_reviews(movie_id, movie_name, official_channel_id)
             time.sleep(2)
+            
+        # Phase 3: for each movie, find the pster using TMDB API call
+        for movie_id, movie_name in movie_ids:
+            phase3_insert_posters(movie_id, movie_name)
+            time.sleep(2)
 
     except RuntimeError as e:
         print(f"\n  STOPPED: {e}")
@@ -966,10 +1022,11 @@ def run_pipeline(studio):
 if __name__ == "__main__":
     # studio = {"name": "Paramount Pictures", "id": "f5cfdff5-13a5-47a3-a7e9-51416f44ee33"}
     # studio = {"name": "Sony Pictures Entertainment", "id": "aa40a97c-fc5b-40cf-8b36-79719e630b93"}
-    # studio = {"name": "A24", "id": "860c981b-4b3a-4e37-b7d9-560da40cfce4"}
-    studio = {"name": "Marvel Studios", "id": "11111111-1111-1111-1111-111111111111"}
+    studio = {"name": "A24", "id": "860c981b-4b3a-4e37-b7d9-560da40cfce4"}
+    # studio = {"name": "Marvel Studios", "id": "11111111-1111-1111-1111-111111111111"}
     run_pipeline(studio)
-
+    
+    
     # tests the transcription function with a sample YouTube video URL (replace with an actual trailer URL for real testing)
     # result = transcribe("https://www.youtube.com/watch?v=PVEi8KnD56o")
     # print(result)

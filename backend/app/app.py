@@ -3,9 +3,11 @@ import json
 import re
 from groq import Groq
 from dotenv import load_dotenv
+load_dotenv()
+
 from db_routes import get_conn, load_llm_output, get_movie_data_for_llm, get_movie_id_from_title, get_studio_id_from_movie_id, insert_insight_run
 
-load_dotenv()
+
 GROQ_LLM_API_KEY = os.getenv("GROQ_LLM_API_KEY")
 
 client = Groq(api_key=GROQ_LLM_API_KEY)
@@ -161,6 +163,16 @@ You must return the following JSON structure exactly:
     },
     ...
   ],
+  "claims": [
+    {
+      "claim": "<specific statement>",
+      "mention_pct": <0.0-1.0>,
+      "mention_count": <integer>,
+      "verdict": "<verified, disputed, or misleading>",
+      "risk_level": "<low, mid, or high>"
+    },
+    ...
+  ],
   "sentiment_breakdown": {
     "overall_sentiment": "<either positive, negative, or mixed>",
     "avg_sentiment_score": <number between -1.0 and 1.0>,
@@ -197,6 +209,11 @@ Guidelines:
 - Key takeaways and creator_risk should be points a studio executive may need to know about overall reception of the movie.
 - There should be a total of 10 words in top_words, based on the most common words that appear across videos and comments
 - In sentiment_breakdown, positive_pct, negative_pct, and neutral_pct should all sum to 100
+- Extract 4-6 claims that represent the most repeated or impactful statements across all videos and comments.
+- verdict should reflect whether the claim is factually supported (verified), contested by multiple sources (disputed), or potentially misleading to audiences (misleading).
+- risk_level should reflect how damaging the claim could be to the studio if it spread further: low for minor opinions, mid for contested narratives, high for reputational threats.
+- mention_pct should be a float from 0.0 to 1.0 estimating the share of all videos and comments that reference this claim.
+- mention_count should be an integer estimate of how many individual videos or comments contain this claim.
 """
 
 # also need to clean input given to aggregation prompt
@@ -295,7 +312,7 @@ def run_llm_for_movie(run_id, movie_id):
   
 # main   
 if __name__ == "__main__":    
-    MOVIE_ID = get_movie_id_from_title("Marvel Studios' Avengers: Infinity War")
+    MOVIE_ID = get_movie_id_from_title("If I Had Legs I'd Kick You")
     STUDIO_ID = get_studio_id_from_movie_id(MOVIE_ID)
     
     conn = get_conn()
