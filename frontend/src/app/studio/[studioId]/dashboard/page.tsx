@@ -166,7 +166,7 @@ export default function StudioDashboard() {
         }
 
         const data: DashboardResponse = await res.json();
-        console.log("Dashboard response:", data); // ADD THIS
+        // console.log("Dashboard response:", data); // ADD THIS
         setDashboardData(data);
       } catch (err) {
         console.error(err);
