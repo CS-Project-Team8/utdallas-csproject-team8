@@ -2,10 +2,12 @@ import os
 import json
 import re
 from groq import Groq
-from dotenv import load_dotenv
 
-from db_routes import get_conn, load_llm_output, get_movie_data_for_llm, get_movie_id_from_title, get_studio_id_from_movie_id, insert_insight_run
-load_dotenv()
+from db_routes import get_conn, load_llm_output, get_movie_data_for_llm, get_movie_id_from_title, get_studio_id_from_movie_id, insert_insight_run, update_studio_top_movies
+
+from dotenv import load_dotenv
+from pathlib import Path
+load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
 
 GROQ_LLM_API_KEY = os.getenv("GROQ_LLM_API_KEY")
 
@@ -307,18 +309,31 @@ def run_llm_for_movie(run_id, movie_id):
 
     print("Saving to DB...")
     load_llm_output(run_id, movie_id, result)  # fresh conn opened only now
+    
+    studio_id = get_studio_id_from_movie_id(movie_id)
+    conn = get_conn()
+    try:
+        cursor = conn.cursor()
+        update_studio_top_movies(cursor, studio_id, method="auto_generated")
+        conn.commit()
+        print("Updated studiotopmovies for studio")
+    finally:
+        conn.close()
+    
     return result
   
 # main   
 if __name__ == "__main__":    
-    MOVIE_ID = get_movie_id_from_title("If I Had Legs I'd Kick You")
-    STUDIO_ID = get_studio_id_from_movie_id(MOVIE_ID)
+    # MOVIE_ID = get_movie_id_from_title("If I Had Legs I'd Kick You")
+    # STUDIO_ID = get_studio_id_from_movie_id(MOVIE_ID)
     
     conn = get_conn()
-    RUN_ID = insert_insight_run(conn.cursor(), STUDIO_ID)
+    #RUN_ID = insert_insight_run(conn.cursor(), STUDIO_ID)
+    update_studio_top_movies(conn.cursor(), "860c981b-4b3a-4e37-b7d9-560da40cfce4", method="auto_generated")
     conn.commit()
     conn.close()
  
-    result = run_llm_for_movie(RUN_ID, MOVIE_ID)
-    print("Final aggregated analysis:")
-    print(json.dumps(result, indent=2))
+    # result = run_llm_for_movie(RUN_ID, MOVIE_ID)
+    # print("Final aggregated analysis:")
+    # print(json.dumps(result, indent=2))
+    

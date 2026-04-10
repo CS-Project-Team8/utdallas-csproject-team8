@@ -1,11 +1,13 @@
 import json
 import os
-from pathlib import Path
 import psycopg2
 import psycopg2.extras
-from dotenv import load_dotenv
+from datetime import datetime, timezone
 
-load_dotenv(dotenv_path=Path(__file__).parent.parent.parent / ".env")
+from dotenv import load_dotenv
+from pathlib import Path
+load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
+
 DB_URL = os.getenv("DATABASE_URL")
 
 def get_conn():
@@ -332,3 +334,50 @@ def insert_movie_claims(cursor, movieid, result):
             claim.get("verdict"),
             claim.get("risk_level"),
         ))
+        
+def update_studio_top_movies(cursor, studio_id, method="auto_generated"):
+    # Step 1: Check how many movies currently exist for this studio
+    cursor.execute("""
+        SELECT COUNT(*) FROM studiotopmovies
+        WHERE studioid = %s
+    """, (studio_id,))
+    
+    current_count = cursor.fetchone()[0]
+    
+    # Step 2: Find the 5 most recently released active movies for this studio
+    cursor.execute("""
+        SELECT movieid
+        FROM movies
+        WHERE studioid = %s
+          AND status = 'active'
+        ORDER BY releasedate DESC NULLS LAST, createdat DESC
+        LIMIT 5
+    """, (studio_id,))
+    
+    recent_movies = cursor.fetchall()
+    
+    if not recent_movies:
+        print(f"  No active movies found for studio {studio_id}")
+        return
+    
+    now = datetime.now(timezone.utc)
+    
+    # Step 3: If 5 movies already exist, delete them (replace mode)
+    if current_count >= 5:
+        cursor.execute("""
+            DELETE FROM studiotopmovies
+            WHERE studioid = %s
+        """, (studio_id,))
+        print(f"  Replacing {current_count} existing movies for studio {studio_id}")
+    else:
+        print(f"  Inserting new movies (currently {current_count}/5) for studio {studio_id}")
+    
+    # Step 4: Insert the new top movies with updated rankings
+    for rank, row in enumerate(recent_movies, start=1):
+        movie_id = row[0]
+        cursor.execute("""
+            INSERT INTO studiotopmovies (studioid, rank, movieid, asof, method)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (studio_id, rank, movie_id, now, method))
+    
+    print(f"  Updated studiotopmovies: {len(recent_movies)} movies now ranked for studio {studio_id}")

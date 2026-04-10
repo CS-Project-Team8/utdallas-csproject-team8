@@ -17,11 +17,6 @@ import math
 # imports for TMDB API
 import requests
 
-# imports for environment variables
-from dotenv import load_dotenv
-import os
-from pathlib import Path
-
 # imports for DB operations
 from db_operationstest import (
     conn,
@@ -36,6 +31,10 @@ from db_operationstest import (
     insert_movie_poster
 )
 
+# imports for environment variables
+import os
+from pathlib import Path
+from dotenv import load_dotenv
 load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
 
 # keys and client setup
@@ -1027,6 +1026,11 @@ if __name__ == "__main__":
     # studio = {"name": "Marvel Studios", "id": "11111111-1111-1111-1111-111111111111"}
     run_pipeline(studio)
     
+    # phase3_insert_posters("1e58c368-b799-4f96-b2c7-c2637bab81eb", "If I Had Legs I'd Kick You")
+    # phase3_insert_posters("3a3b94bf-c10d-4681-b4cd-5361ed4a688a", "Marc by Sofia")
+    # phase3_insert_posters("900d6cc6-c3c8-4ed0-8000-c5c34bf54c76", "undertone")
+    # phase3_insert_posters("f3028919-7a4b-45b0-9d4d-662cf159438b", "The Drama")
+    # phase3_insert_posters("894370b8-7c37-4ad5-9a08-824ecf203c1c", "Pillion")
     
     # tests the transcription function with a sample YouTube video URL (replace with an actual trailer URL for real testing)
     # result = transcribe("https://www.youtube.com/watch?v=PVEi8KnD56o")
