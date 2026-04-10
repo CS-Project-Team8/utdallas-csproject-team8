@@ -182,8 +182,8 @@ def get_movie_trends(studio_id: UUID, movie_id: UUID):
         if isinstance(raw_signals, list):
             for item in raw_signals:
                 if isinstance(item, dict):
-                    label = item.get("label") or item.get("name") or item.get("signal")
-                    value = item.get("value") or item.get("score") or item.get("pct")
+                    label = item.get("label") or item.get("name") or item.get("mood")
+                    value = item.get("value") or item.get("score") or item.get("percentage")
                     if label is not None and value is not None:
                         rising_signals.append({"label": label, "value": round(float(value))})
     elif snapshot and snapshot["moodsignals"]:
@@ -285,7 +285,8 @@ def get_movie_narratives(studio_id: UUID, movie_id: UUID):
                             or item.get("summary")
                             or item.get("desc")
                     )
-                    strength = item.get("strength") or item.get("score") or item.get("pct")
+                    sentiment = item.get("sentiment", "neutral").lower()
+                    strength = 80 if sentiment == "positive" else 20 if sentiment == "negative" else 50
                     review_count = (
                             item.get("reviewCount")
                             or item.get("reviews")
