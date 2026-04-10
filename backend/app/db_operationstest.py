@@ -97,4 +97,11 @@ def insert_transcript(cursor, videoid, language, source, fulltext):
         INSERT INTO ytvideotranscripts (videoid, language, source, fulltext)
         VALUES (%s, %s, %s, %s)
         ON CONFLICT (videoid, language, fetchedat) DO NOTHING
-    """, (videoid, language, source, fulltext))    
+    """, (videoid, language, source, fulltext))   
+    
+def insert_movie_poster(cursor, movie_id, poster_url):
+    cursor.execute("""
+        UPDATE movies
+        SET posterurl = %s, updatedat = now()
+        WHERE movieid = %s
+    """, (poster_url, movie_id))

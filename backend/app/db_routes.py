@@ -1,11 +1,13 @@
 import json
 import os
-from pathlib import Path
 import psycopg2
 import psycopg2.extras
-from dotenv import load_dotenv
+from datetime import datetime, timezone
 
-load_dotenv(dotenv_path=Path(__file__).parent.parent.parent / ".env")
+from dotenv import load_dotenv
+from pathlib import Path
+load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
+
 DB_URL = os.getenv("DATABASE_URL")
 
 def get_conn():
@@ -118,6 +120,21 @@ def load_llm_output(runid, movieid, result):
         
         print("Saving analytics snapshot")
         insert_movie_analytics_snapshot(cursor, movieid, result)
+        
+        print("Saving sentiment timeline")
+        insert_movie_sentiment_timeline(cursor, movieid, result)
+
+        print("Saving discussion topics")
+        insert_movie_discussion_topics(cursor, runid, movieid, result)
+
+        print("Saving claims")
+        insert_movie_claims(cursor, movieid, result)
+
+        print("Saving review velocity")
+        insert_movie_review_velocity(cursor, movieid)
+
+        print("Saving engaged reviews")
+        insert_movie_engaged_reviews(cursor, movieid)
 
         conn.commit()
 
@@ -230,3 +247,137 @@ def get_studio_id_from_movie_id(movie_id):
                 raise ValueError(f"No movie found with id: {movie_id}")
     finally:
         conn.close()
+
+
+def insert_movie_review_velocity(cursor, movieid):
+    cursor.execute("""
+        INSERT INTO moviereviewvelocity (movieid, weekstart, reviewsthisweek, cumulativereviews)
+        SELECT
+            %s,
+            date_trunc('week', publishedat)::date AS weekstart,
+            COUNT(*) AS reviewsthisweek,
+            SUM(COUNT(*)) OVER (ORDER BY date_trunc('week', publishedat)) AS cumulativereviews
+        FROM ytvideos
+        WHERE movieid = %s AND videorole = 'review'
+        GROUP BY date_trunc('week', publishedat)
+        ORDER BY weekstart
+    """, (movieid, movieid))
+
+def insert_movie_engaged_reviews(cursor, movieid):
+    cursor.execute("""
+        INSERT INTO movieengagedreviewvideos (movieid, videoid, rank, views, likes, comments, engagementrate)
+        SELECT
+            v.movieid,
+            v.videoid,
+            ROW_NUMBER() OVER (ORDER BY 
+                (COALESCE(s.viewcount,0) + COALESCE(s.likecount,0) + COALESCE(s.commentcount,0)) DESC
+            ) AS rank,
+            s.viewcount,
+            s.likecount,
+            s.commentcount,
+            CASE WHEN COALESCE(s.viewcount,0) > 0
+                THEN (COALESCE(s.likecount,0) + COALESCE(s.commentcount,0))::float / s.viewcount
+                ELSE 0
+            END AS engagementrate
+        FROM ytvideos v
+        JOIN ytvideometricsnapshots s ON s.videoid = v.videoid
+        WHERE v.movieid = %s AND v.videorole = 'review'
+    """, (movieid,))
+
+def insert_movie_sentiment_timeline(cursor, movieid, result):
+    sentiment = result.get("sentiment_breakdown", {})
+    cursor.execute("""
+        INSERT INTO moviesentimenttimeline 
+            (movieid, periodstart, periodend, avgsentiment, pospct, negpct, neupct, reviewvideocount)
+        VALUES (
+            %s,
+            (SELECT MIN(publishedat)::date FROM ytvideos WHERE movieid = %s AND videorole = 'review'),
+            (SELECT MAX(publishedat)::date FROM ytvideos WHERE movieid = %s AND videorole = 'review'),
+            %s, %s, %s, %s,
+            (SELECT COUNT(*) FROM ytvideos WHERE movieid = %s AND videorole = 'review')
+        )
+    """, (
+        movieid, movieid, movieid,
+        sentiment.get("avg_sentiment_score"),
+        sentiment.get("positive_pct", 0) / 100.0,
+        sentiment.get("negative_pct", 0) / 100.0,
+        sentiment.get("neutral_pct", 0) / 100.0,
+        movieid
+    ))
+
+def insert_movie_discussion_topics(cursor, runid, movieid, result):
+    for narrative in result.get("top_narratives", []):
+        # sentiment_map = {"positive": 1.0, "negative": -1.0, "mixed": 0.0}
+        narratives = result.get("top_narratives", [])
+        pct = 1.0 / max(len(narratives), 1)
+        cursor.execute("""
+            INSERT INTO moviediscussiontopics (movieid, topiclabel, pct, keywords, summary)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (
+            movieid,
+            narrative.get("title", ""),
+            pct,
+            json.dumps(narrative.get("supporting_claims", [])),
+            narrative.get("summary", "")
+        ))
+
+def insert_movie_claims(cursor, movieid, result):
+    for claim in result.get("claims", []):
+        cursor.execute("""
+            INSERT INTO movieclaims (movieid, claimtext, mentionpct, mentioncount, verdict, risklevel)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (
+            movieid,
+            claim.get("claim"),
+            claim.get("mention_pct"),
+            claim.get("mention_count"),
+            claim.get("verdict"),
+            claim.get("risk_level"),
+        ))
+        
+def update_studio_top_movies(cursor, studio_id, method="auto_generated"):
+    # Step 1: Check how many movies currently exist for this studio
+    cursor.execute("""
+        SELECT COUNT(*) FROM studiotopmovies
+        WHERE studioid = %s
+    """, (studio_id,))
+    
+    current_count = cursor.fetchone()[0]
+    
+    # Step 2: Find the 5 most recently released active movies for this studio
+    cursor.execute("""
+        SELECT movieid
+        FROM movies
+        WHERE studioid = %s
+          AND status = 'active'
+        ORDER BY releasedate DESC NULLS LAST, createdat DESC
+        LIMIT 5
+    """, (studio_id,))
+    
+    recent_movies = cursor.fetchall()
+    
+    if not recent_movies:
+        print(f"  No active movies found for studio {studio_id}")
+        return
+    
+    now = datetime.now(timezone.utc)
+    
+    # Step 3: If 5 movies already exist, delete them (replace mode)
+    if current_count >= 5:
+        cursor.execute("""
+            DELETE FROM studiotopmovies
+            WHERE studioid = %s
+        """, (studio_id,))
+        print(f"  Replacing {current_count} existing movies for studio {studio_id}")
+    else:
+        print(f"  Inserting new movies (currently {current_count}/5) for studio {studio_id}")
+    
+    # Step 4: Insert the new top movies with updated rankings
+    for rank, row in enumerate(recent_movies, start=1):
+        movie_id = row[0]
+        cursor.execute("""
+            INSERT INTO studiotopmovies (studioid, rank, movieid, asof, method)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (studio_id, rank, movie_id, now, method))
+    
+    print(f"  Updated studiotopmovies: {len(recent_movies)} movies now ranked for studio {studio_id}")

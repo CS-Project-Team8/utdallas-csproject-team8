@@ -12,6 +12,7 @@ import {
   TrendingUp,
   ThumbsUp,
 } from "lucide-react";
+import { data } from "react-router-dom";
 
 type Studio = {
   id: string;
@@ -165,6 +166,7 @@ export default function StudioDashboard() {
         }
 
         const data: DashboardResponse = await res.json();
+        // console.log("Dashboard response:", data); // ADD THIS
         setDashboardData(data);
       } catch (err) {
         console.error(err);
@@ -229,7 +231,7 @@ export default function StudioDashboard() {
               .filter((movie): movie is Movie => movie !== null),
       [dashboardData?.recentMovies, studioId]
   );
-
+  
   const displayedMovies =
       query.trim().length > 0 ? movieResults ?? [] : fallbackMovies;
   const accent = studio.brandAccent;
