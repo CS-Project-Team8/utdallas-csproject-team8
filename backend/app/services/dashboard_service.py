@@ -102,11 +102,8 @@ def get_studio_dashboard(db, studio_id: str):
                           mi.summary,
                           ls.averagesentiment,
                           ls.totalviews,
-                          ls.totallikes,
-                          stm.rank
-                      FROM studiotopmovies stm
-                               JOIN movies m
-                                    ON m.movieid = stm.movieid
+                          ls.totallikes
+                      FROM movies m
                                LEFT JOIN latest_snapshots ls
                                          ON ls.movieid = m.movieid
                                LEFT JOIN latest_success_run lsr
@@ -114,8 +111,10 @@ def get_studio_dashboard(db, studio_id: str):
                                LEFT JOIN movieinsights mi
                                          ON mi.movieid = m.movieid
                                              AND mi.runid = lsr.runid
-                      WHERE stm.studioid = :studio_id
-                      ORDER BY stm.rank ASC
+                      WHERE m.studioid = :studio_id
+                        AND m.status = 'active'
+                      ORDER BY m.releasedate DESC NULLS LAST, m.createdat DESC
+                          LIMIT 5
                       """)
 
     studio = db.execute(studio_sql, {"studio_id": studio_id}).mappings().first()
@@ -189,11 +188,8 @@ def get_dashboard_movies(db, studio_id: str):
                           mi.summary,
                           ls.averagesentiment,
                           ls.totalviews,
-                          ls.totallikes,
-                          stm.rank
-                      FROM studiotopmovies stm
-                               JOIN movies m
-                                    ON m.movieid = stm.movieid
+                          ls.totallikes
+                      FROM movies m
                                LEFT JOIN latest_snapshots ls
                                          ON ls.movieid = m.movieid
                                LEFT JOIN latest_success_run lsr
@@ -201,8 +197,10 @@ def get_dashboard_movies(db, studio_id: str):
                                LEFT JOIN movieinsights mi
                                          ON mi.movieid = m.movieid
                                              AND mi.runid = lsr.runid
-                      WHERE stm.studioid = :studio_id
-                      ORDER BY stm.rank ASC
+                      WHERE m.studioid = :studio_id
+                        AND m.status = 'active'
+                      ORDER BY m.releasedate DESC NULLS LAST, m.createdat DESC
+                          LIMIT 5
                       """)
 
     rows = db.execute(movies_sql, {"studio_id": studio_id}).mappings().all()
