@@ -237,9 +237,9 @@ def _build_video_input(transcript, comments):
 # defining llm model and message so don't have to repeat
 def _call_llm(system_prompt, user_content):
     response = client.chat.completions.create(
-        # model = "llama-3.3-70b-versatile", # using this for production
+        model = "llama-3.3-70b-versatile", # using this for production
         # model = "llama-3.1-8b-instant",  # using this for testing
-        model = "meta-llama/llama-4-scout-17b-16e-instruct",  
+        # model = "meta-llama/llama-4-scout-17b-16e-instruct",  
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user",   "content": user_content},
@@ -324,7 +324,11 @@ def run_llm_for_movie(run_id, movie_id):
   
 # main   
 if __name__ == "__main__":    
-    MOVIE_ID = get_movie_id_from_title("Guardians of the Galaxy Vol. 3")
+  movie_list = ["Weapons"]  
+  for title in movie_list:
+    print(f"\n\n=== Running LLM pipeline for '{title}' ===")
+  
+    MOVIE_ID = get_movie_id_from_title(title)
     STUDIO_ID = get_studio_id_from_movie_id(MOVIE_ID)
     
     conn = get_conn()
@@ -335,4 +339,3 @@ if __name__ == "__main__":
     result = run_llm_for_movie(RUN_ID, MOVIE_ID)
     print("Final aggregated analysis:")
     print(json.dumps(result, indent=2))
-    

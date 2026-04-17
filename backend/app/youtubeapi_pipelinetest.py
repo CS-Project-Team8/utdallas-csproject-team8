@@ -2,7 +2,7 @@
 import re
 import time
 from googleapiclient.discovery import build
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 # imports for transcript extraction
 from groq import Groq
@@ -96,19 +96,44 @@ def calculate_engagement_rate(views, likes, comments):
 def normalize_title(video_title):
     t = video_title.strip()
 
+    # Keywords used to identify trailers
     TRAILER_SIGNALS = [
-        "official trailer", "official teaser trailer", "official teaser",
-        "teaser trailer", "trailer"
+        "official trailer", "official teaser trailer", "teaser trailer", "trailer"
     ]
 
-    for sep in ["|", "–", "-"]:
+    # 1. SEPARATOR LOGIC (Most accurate for professional uploads)
+    # Checks for | or - and ensures the right side contains a trailer keyword
+    for sep in ["|", "–", "-", ":"]:
         if sep in t:
             parts = [p.strip() for p in t.split(sep, 1)]
             if len(parts) == 2:
-                right = parts[1].lower()
-                if any(right.startswith(sig) for sig in TRAILER_SIGNALS):
-                    candidate = re.sub(r"\s*\(.*?\)\s*$", "", parts[0]).strip()
-                    return candidate if len(candidate) > 2 else None
+                left, right = parts[0], parts[1].lower()
+                if any(sig in right for sig in TRAILER_SIGNALS):
+                    # Remove trailing (2026) or similar years
+                    candidate = re.sub(r"\s*\(\d{4}\)\s*$", "", left).strip()
+                    return candidate if len(candidate) > 1 else None
+
+    # 2. PHRASE LOGIC (Handles the "Run. Watch the..." issue)
+    # Looks for a specific movie name after "for"
+    for phrase in ["trailer for ", "teaser for "]:
+        if phrase in t.lower():
+            idx = t.lower().find(phrase) + len(phrase)
+            # Take the text after "for", but stop at punctuation or commas
+            candidate = re.split(r'[,.\!]', t[idx:])[0].strip()
+            return candidate if len(candidate) > 1 else None
+
+    # 3. FALLBACK LOGIC (Grabs everything before the keyword)
+    # Useful for "Mortal Kombat II Official Trailer" (no separator)
+    t_lower = t.lower()
+    for signal in TRAILER_SIGNALS:
+        if signal in t_lower:
+            idx = t_lower.find(signal)
+            candidate = t[:idx].strip()
+            # Clean up trailing punctuation like "The Bride!"
+            candidate = re.sub(r"[\!\?\:\-]$", "", candidate).strip()
+            candidate = re.sub(r"\s*\(\d{4}\)\s*$", "", candidate).strip()
+            if len(candidate) > 1:
+                return candidate
 
     return None
 
@@ -257,79 +282,8 @@ def _parse_retry_wait(error_str):
     if m:
         return math.ceil(float(m.group(1)))
     return 240  # conservative fallback: 4 minutes
-        
-# # prompt for Gemini 3 Flash -> please check over during PR for accuracy/clarity & if output is in right format
-# TRANSCRIBE_PROMPT = """
-# You are a video content analyst that specializes in extracting structured insights from YouTube videos.
-# Your job is to analyze the video and return a structured JSON object with insights. Do not return anything else.
-# Do not include any explanation or text outside of the JSON object. If a field cannot be determined, use null.
 
-# You must return the following JSON structure exactly:
 
-# {
-#   "overall_sentiment": "<either positive, negative, or mixed>",
-#   "key_points": [
-#     "<concise string summarizing a main point made by the creator>",
-#     ...
-#   ],
-#   "conclusions": [
-#     "<any verdict or conclusion the creator reaches>",
-#     ...
-#   ],
-#   "summary": "<2-3 sentence overview of the video's content and tone>"
-# }
-
-# Guidelines:
-# - Extract 3-5 key points and 1-3 conclusions.
-# - Overall sentiment should reflect the creator's tone, not the subject matter.
-# - Key points should be actionable insights, not vague descriptions.
-# """
-
-# # prompt for Gemini 3 Flash -> please check over during PR for accuracy/clarity & if output is in right format
-# TRANSCRIBE_PROMPT = """
-# Extract the transcript from the following youtube video and return the transcript as a JSON object.
-# """
-
-# # helper function to get video transcript and extract insights using Gemini 3 Flash 
-# def transcribe(video_url):
-#     response = client.models.generate_content(
-#         model="gemini-3-flash-preview",
-#         contents=[
-#             types.Content(parts=[
-#                 types.Part(text=TRANSCRIBE_PROMPT),  # system instructions
-#             ]),
-#             types.Content(parts=[
-#                 types.Part(file_data=types.FileData(file_uri=video_url)),  # actual video
-#                 types.Part(text="Analyze this video and return the JSON object as specified.")
-#             ])
-#         ]
-#     )
-#     raw = response.text.strip()
-#     # strip markdown code fences if Gemini wraps the response
-#     if raw.startswith("```"):
-#         raw = re.sub(r"^```[a-z]*\n?", "", raw)
-#         raw = re.sub(r"\n?```$", "", raw)
-#     return json.loads(raw)
-
-# # helper function to transcribe a video and insert the result into ytvideotranscripts table
-# def transcribe_and_insert(cursor, videoid, video_url):
-#     try:
-#         insights = transcribe(video_url)
-#         # store the full JSON insights as the fulltext
-#         fulltext = json.dumps(insights)
-#         transcript_id = insert_transcript(
-#             cursor,
-#             videoid=videoid,
-#             language="en",
-#             source="auto",
-#             fulltext=fulltext,
-#         )
-#         return transcript_id
-#     except Exception as e:
-#         print(f"  Error transcribing {video_url}: {e}")
-#         return None
-    
-    
 # YOUTUBE API DATA FUNCTIONS:   
 
 # helper function to get video statistics (views, likes, comments) -> for ytVideoMetricSnapshots table and movieMetricSnapshots table
@@ -405,110 +359,25 @@ def get_uploads_playlist_id(channel_id):
         raise RuntimeError(f"Channel not found: {channel_id}")
     return items[0]["contentDetails"]["relatedPlaylists"]["uploads"]
 
-# # helper function (for Phase 0) to get latest trailers from channel uploads playlist
-# def get_latest_trailers_from_channel(channel_id, limit=5, max_scan=200): # see if I have to increase max_scan to guarantee 5 trailers
-#     print(f"  Fetching uploads playlist for channel {channel_id}...")
-#     playlist_id = get_uploads_playlist_id(channel_id)
-
-#     # Step 1: collect video IDs from uploads playlist
-#     video_ids = []
-#     page_token = None
-#     while len(video_ids) < max_scan:
-#         result = youtube_object.playlistItems().list(
-#             part="contentDetails",
-#             playlistId=playlist_id,
-#             maxResults=50,
-#             pageToken=page_token
-#         ).execute()
-#         use_quota(1, "playlistItems.list")
-
-#         for item in result.get("items", []):
-#             vid = item["contentDetails"].get("videoId")
-#             if vid:
-#                 video_ids.append(vid)
-#         page_token = result.get("nextPageToken")
-#         if not page_token:
-#             break
-
-#     print(f"  Scanned {len(video_ids)} uploads, fetching details...")
-
-#     # Step 2: fetch video details in batches of 50
-#     trailers = []
-#     seen_titles = set()
-#     today = datetime.today().strftime("%Y-%m-%d")
-
-#     for i in range(0, len(video_ids), 50):
-#         if len(trailers) >= limit:
-#             break
-
-#         batch = video_ids[i:i + 50]
-#         result = youtube_object.videos().list(
-#             part="snippet,statistics,contentDetails",
-#             id=",".join(batch)
-#         ).execute()
-#         use_quota(1, f"videos.list (batch {i//50 + 1})")
-
-#         for item in result.get("items", []):
-#             title = item["snippet"]["title"]
-#             print(f"  Scanning: '{title}'")  # add this
-#             title_lower = title.lower()
-    
-#             # Skip anything that doesn't look like a trailer
-#             if not any(kw in title_lower for kw in ["trailer", "teaser"]):
-#                 continue
-            
-#             movie_title = normalize_title(title)
-#             if not movie_title or movie_title in seen_titles:
-#                 continue
-
-#             # Check TMDB for release date — skip unreleased movies
-#             release_date = get_movie_release_date(movie_title)
-#             if not release_date:
-#                 print(f"  Skipping '{movie_title}' — not found on TMDB")
-#                 continue
-#             if release_date > today:
-#                 print(f"  Skipping '{movie_title}' — releases {release_date} (not yet out)")
-#                 continue
-
-#             seen_titles.add(movie_title)
-#             trailers.append({
-#                 "movie_title": movie_title,
-#                 "video_id": item["id"],
-#                 "title": title,
-#                 "channel_id": item["snippet"]["channelId"],
-#                 "channel_title": item["snippet"]["channelTitle"],
-#                 "published_at": item["snippet"]["publishedAt"][:10],
-#                 "published_at_full": item["snippet"]["publishedAt"],
-#                 "description": item["snippet"]["description"],
-#                 "views": int(item["statistics"].get("viewCount", 0)),
-#                 "likes": int(item["statistics"].get("likeCount", 0)),
-#                 "comment_count": int(item["statistics"].get("commentCount", 0)),
-#                 "tags": item["snippet"].get("tags"),
-#                 "category_id": item["snippet"].get("categoryId"),
-#                 "default_language": item["snippet"].get("defaultLanguage"),
-#                 "caption": item.get("contentDetails", {}).get("caption") == "true",
-#             })
-
-#             if len(trailers) >= limit:
-#                 break
-
-#     return trailers
-
 def get_latest_trailers_from_channel(channel_id, limit=5, max_scan=200):
     print(f"  Searching for trailers on channel {channel_id}...")
 
-    # Run two searches — date for recency, relevance for well-known trailers
+    # Define a recency threshold (e.g., videos published in the last 12 months)
+    # This prevents the relevance search from grabbing hits from 2017
+    one_year_ago = (datetime.now() - timedelta(days=365)).isoformat() + "Z"
+
     candidate_ids = []
     seen = set()
 
     for order in ["date", "relevance"]:
         result = youtube_object.search().list(
-            q="official trailer movie",
+            q="official trailer", # Removed "movie" to keep query broad but relevant
             part="id,snippet",
             type="video",
             channelId=channel_id,
             maxResults=25,
-            order=order
+            order=order,
+            publishedAfter=one_year_ago  # <--- FIX 1: Filter at the API level
         ).execute()
         use_quota(100, f"search.list (channel trailers {order})")
         for item in result.get("items", []):
@@ -521,7 +390,6 @@ def get_latest_trailers_from_channel(channel_id, limit=5, max_scan=200):
         print("  No trailer candidates found")
         return []
 
-    # Fetch full details for all candidates in one batch
     result = youtube_object.videos().list(
         part="snippet,statistics,contentDetails",
         id=",".join(candidate_ids)
@@ -547,6 +415,14 @@ def get_latest_trailers_from_channel(channel_id, limit=5, max_scan=200):
         if not release_date:
             print(f"  Skipping '{movie_title}' — not found on TMDB")
             continue
+            
+        # FIX 2: Recency Guard
+        # Check if the movie is too old (e.g., released before 2024)
+        release_year = int(release_date.split("-")[0])
+        if release_year < 2024:
+            print(f"  Skipping '{movie_title}' — too old (Released {release_date})")
+            continue
+
         if release_date > today:
             print(f"  Skipping '{movie_title}' — releases {release_date} (not yet out)")
             continue
@@ -1017,21 +893,13 @@ def run_pipeline(studio):
 
 
 # MAIN: 
-
 # main function to run the pipeline and test the transcription function with a sample YouTube video URL
 if __name__ == "__main__":
-    # studio = {"name": "Paramount Pictures", "id": "f5cfdff5-13a5-47a3-a7e9-51416f44ee33"}
-    # studio = {"name": "Sony Pictures Entertainment", "id": "aa40a97c-fc5b-40cf-8b36-79719e630b93"}
-    studio = {"name": "A24", "id": "860c981b-4b3a-4e37-b7d9-560da40cfce4"}
-    # studio = {"name": "Marvel Studios", "id": "11111111-1111-1111-1111-111111111111"}
+    # studio = {"name": "Marvel Studios", "id": "11111111-1111-1111-1111-111111111111"} # -> aastha admin
+    # studio = {"name": "A24", "id": "860c981b-4b3a-4e37-b7d9-560da40cfce4"} # -> zora admin
+    # studio = {"name": "Lionsgate Films", "id": "170a1803-718f-4166-93c8-839d6442438c"} # -> farah admin
+    # studio = {"name": "Universal Pictures", "id": "9fe4726b-fdb3-4640-8066-fbf067e503ce"} # -> aashish admin
+    # studio = {"name": "Sony Pictures Entertainment", "id": "6233e3e4-8bcd-4ca0-adac-1fcc3f6ff623"} # -> anush admin
+    studio = {"name": "Warner Bros. Pictures", "id": "c9e36e96-5295-4724-8825-9a2db92636e9"} # -> shreyas admin
+    
     run_pipeline(studio)
-    
-    # phase3_insert_posters("1e58c368-b799-4f96-b2c7-c2637bab81eb", "If I Had Legs I'd Kick You")
-    # phase3_insert_posters("3a3b94bf-c10d-4681-b4cd-5361ed4a688a", "Marc by Sofia")
-    # phase3_insert_posters("900d6cc6-c3c8-4ed0-8000-c5c34bf54c76", "undertone")
-    # phase3_insert_posters("f3028919-7a4b-45b0-9d4d-662cf159438b", "The Drama")
-    # phase3_insert_posters("894370b8-7c37-4ad5-9a08-824ecf203c1c", "Pillion")
-    
-    # tests the transcription function with a sample YouTube video URL (replace with an actual trailer URL for real testing)
-    # result = transcribe("https://www.youtube.com/watch?v=PVEi8KnD56o")
-    # print(result)

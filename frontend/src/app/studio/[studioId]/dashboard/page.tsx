@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import React, { useMemo, useState, useEffect } from "react";
 import {
   Search,
@@ -11,8 +11,8 @@ import {
   Star,
   TrendingUp,
   ThumbsUp,
+  LogOut,
 } from "lucide-react";
-import { data } from "react-router-dom";
 
 type Studio = {
   id: string;
@@ -85,6 +85,7 @@ function normalizeMovie(raw: RawMovie, fallbackStudioId?: string): Movie | null 
 
 export default function StudioDashboard() {
   const params = useParams();
+  const router = useRouter();
   const [restoreKey, setRestoreKey] = useState(0);
   const studioId = params?.studioId as string;
   const apiBaseUrl =
@@ -166,7 +167,6 @@ export default function StudioDashboard() {
         }
 
         const data: DashboardResponse = await res.json();
-        // console.log("Dashboard response:", data); // ADD THIS
         setDashboardData(data);
       } catch (err) {
         console.error(err);
@@ -231,7 +231,7 @@ export default function StudioDashboard() {
               .filter((movie): movie is Movie => movie !== null),
       [dashboardData?.recentMovies, studioId]
   );
-  
+
   const displayedMovies =
       query.trim().length > 0 ? movieResults ?? [] : fallbackMovies;
   const accent = studio.brandAccent;
@@ -280,6 +280,17 @@ export default function StudioDashboard() {
         .slice(0, 12);
   }, [displayedMovies]);
 
+  // Logout: clears session and redirects to login
+  const handleLogout = () => {
+    try {
+      // Add any token/cookie cleanup here, e.g.:
+      // localStorage.removeItem("token");
+      router.push("/login");
+    } catch {
+      window.location.href = "/login";
+    }
+  };
+
   return (
       <div className="h-screen w-screen bg-[#0B0B0B] text-white">
         <div className="h-full">
@@ -298,7 +309,8 @@ export default function StudioDashboard() {
             />
 
             <div className="relative flex h-full flex-col">
-              <header className="flex items-center justify-between gap-4 px-6 py-5">
+              <header className="flex flex-shrink-0 items-center justify-between gap-4 px-6 py-5">
+                {/* Left: studio logo */}
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-3">
                     <div className="flex items-center gap-2">
@@ -317,6 +329,7 @@ export default function StudioDashboard() {
                   </div>
                 </div>
 
+                {/* Center: search (hidden on mobile) */}
                 <div className="hidden w-full max-w-2xl items-center gap-3 md:flex">
                   <button
                       className="rounded-xl border border-white/10 bg-white/5 p-2.5 text-white/70 hover:text-white"
@@ -336,18 +349,29 @@ export default function StudioDashboard() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3">
-                  <button
+                {/* Right: bell + logout + avatar — flex-shrink-0 is the key here */}
+                  <div className="flex items-center gap-3 flex-shrink-0 ml-auto">
+                    <button
                       className="rounded-xl border border-white/10 bg-white/5 p-2.5 text-white/70 hover:text-white"
                       aria-label="Notifications"
-                  >
-                    <Bell className="h-5 w-5" />
-                  </button>
+                    >
+                      <Bell className="h-5 w-5" />
+                    </button>
 
-                  <div className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/5 text-sm font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
-                    {studio.initials}
+                    {/* ── LOGOUT BUTTON ── */}
+                    <button
+                      onClick={handleLogout}
+                      className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-white/70 hover:text-red-400 hover:bg-red-500/10 transition-all"
+                      aria-label="Log out"
+                    >
+                      <LogOut className="h-5 w-5" />
+                      <span className="text-xs font-medium">Logout</span> 
+                    </button>
+
+                    <div className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/5 text-sm font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+                      {studio.initials}
+                    </div>
                   </div>
-                </div>
               </header>
 
               <div className="px-6">
