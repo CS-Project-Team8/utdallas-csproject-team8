@@ -285,9 +285,9 @@ export default function StudioDashboard() {
     try {
       // Add any token/cookie cleanup here, e.g.:
       // localStorage.removeItem("token");
-      router.push("/login");
+      router.push("/");
     } catch {
-      window.location.href = "/login";
+      window.location.href = "/";
     }
   };
 
