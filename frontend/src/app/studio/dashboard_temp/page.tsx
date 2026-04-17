@@ -9,9 +9,7 @@ import {
   Star,
   TrendingUp,
   ThumbsUp,
-  LogOut
 } from "lucide-react";
-import { useRouter } from "next/router";
 
 /** notes to self: 
  * wire it later:
@@ -195,27 +193,15 @@ export default function StudioDashboard() {
       [metrics]
   );
 
+
   const movieBlocks = useMemo(() => displayedMovies.slice(0, 5), [displayedMovies]);
-
-  const router = useRouter();
-
-  // Robust logout: falls back to hard redirect if router fails
-  const handleLogout = () => {
-    try {
-      // Clear any auth tokens/session data here before redirecting
-      // localStorage.removeItem("token");
-      router.push("/login");
-    } catch (e) {
-      window.location.href = "/login";
-    }
-  };
 
   return (
     <div className="h-screen w-screen bg-[#0B0B0B] text-white">
+     
       <div className="h-full">
         <div className="relative h-full w-full overflow-hidden bg-black shadow-[0_30px_120px_rgba(0,0,0,0.65)] ring-1 ring-white/10">
-
-          {/* Background gradient */}
+         
           <div
             aria-hidden
             className="pointer-events-none absolute inset-0 opacity-80"
@@ -229,15 +215,14 @@ export default function StudioDashboard() {
             }}
           />
 
-          {/* Content */}
+          {/* content */}
           <div className="relative flex h-full flex-col">
-
-            {/* ── HEADER ── */}
+           
             <header className="flex items-center justify-between gap-4 px-6 py-5">
-
-              {/* Left: studio logo */}
+              {/* left: studio logo area */}
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-3">
+                  
                   <div className="flex items-center gap-2">
                     <div
                       className="rounded-[6px] px-2.5 py-1 text-sm font-extrabold tracking-wide text-white"
@@ -252,7 +237,7 @@ export default function StudioDashboard() {
                 </div>
               </div>
 
-              {/* Center: search bar (hidden on mobile) */}
+            
               <div className="hidden md:flex w-full max-w-2xl items-center gap-3">
                 <button
                   className="rounded-xl border border-white/10 bg-white/5 p-2.5 text-white/70 hover:text-white"
@@ -272,7 +257,7 @@ export default function StudioDashboard() {
                 </div>
               </div>
 
-              {/* Right: actions — always visible */}
+             
               <div className="flex items-center gap-3">
                 <button
                   className="rounded-xl border border-white/10 bg-white/5 p-2.5 text-white/70 hover:text-white"
@@ -281,18 +266,6 @@ export default function StudioDashboard() {
                   <Bell className="h-5 w-5" />
                 </button>
 
-                {/* ── LOGOUT BUTTON ── always visible at all breakpoints */}
-                <button
-                  onClick={handleLogout}
-                  className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-white/70 hover:text-red-400 hover:bg-red-500/10 hover:border-red-500/30 transition-all duration-150"
-                  aria-label="Log out"
-                >
-                  <LogOut className="h-5 w-5" />
-                  {/* "Exit" label: visible on sm+ instead of lg+ so it shows up sooner */}
-                  <span className="hidden sm:inline text-xs font-medium">Exit</span>
-                </button>
-
-                {/* Avatar initials */}
                 <div className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/5 text-sm font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
                   {studio.initials}
                 </div>
@@ -303,28 +276,24 @@ export default function StudioDashboard() {
               <div className="h-px w-full bg-white/10" />
             </div>
 
-            {/* ── MAIN ── */}
             <main className="flex-1 overflow-y-auto px-6 py-6">
-
               {loadingDashboard && (
-                <div className="mb-4 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/70">
-                  Loading dashboard...
-                </div>
+                  <div className="mb-4 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/70">
+                    Loading dashboard...
+                  </div>
               )}
 
               {error && (
-                <div className="mb-4 rounded-xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-                  {error}
-                </div>
+                  <div className="mb-4 rounded-xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                    {error}
+                  </div>
               )}
 
               {loadingSearch && query.trim().length > 0 && (
-                <div className="mb-4 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/70">
-                  Searching movies...
-                </div>
+                  <div className="mb-4 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/70">
+                    Searching movies...
+                  </div>
               )}
-
-              {/* KPI cards */}
               <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 {kpis.map(({ label, value, Icon }) => (
                   <div
@@ -348,18 +317,19 @@ export default function StudioDashboard() {
                 ))}
               </section>
 
-              {/* Recent movies */}
+              {/* Recent movies blocks area */}
               <section className="mt-6">
                 <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
                   {movieBlocks.map((movie) => (
-                    <MoviePlaceholderCard
-                      key={movie.id}
-                      accent={accent}
-                      hoverAccent
-                      movie={movie}
-                    />
+                      <MoviePlaceholderCard
+                          key={movie.id}
+                          accent={accent}
+                          hoverAccent
+                          movie={movie}
+                      />
                   ))}
                 </div>
+
               </section>
             </main>
           </div>
@@ -369,12 +339,11 @@ export default function StudioDashboard() {
   );
 }
 
-/* ── Movie card ── */
 function MoviePlaceholderCard({
-  accent,
-  hoverAccent,
-  movie,
-}: {
+                                accent,
+                                hoverAccent,
+                                movie,
+                              }: {
   accent: string;
   hoverAccent?: boolean;
   movie?: Movie;
@@ -388,92 +357,95 @@ function MoviePlaceholderCard({
   const showPoster = Boolean(movie?.posterUrl) && !imgFailed;
 
   return (
-    <div
-      className={[
-        "cursor-pointer group relative h-90 w-full overflow-hidden rounded-[22px] border bg-white/5",
-        "border-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]",
-      ].join(" ")}
-      style={
-        hoverAccent
-          ? { borderColor: "rgba(255,255,255,0.10)" }
-          : undefined
-      }
-    >
-      {showPoster ? (
-        <img
-          src={movie!.posterUrl}
-          alt={movie?.title ?? "Movie poster"}
-          className="absolute inset-0 h-full w-full object-cover"
-          onError={() => setImgFailed(true)}
-        />
-      ) : (
-        <div className="absolute inset-0 bg-black">
-          <div
-            className="absolute inset-x-0 top-0 h-1"
-            style={{ backgroundColor: accent }}
-          />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.08),transparent_35%)]" />
-          <div className="flex h-full w-full flex-col items-center justify-center px-6 text-center">
-            <div className="text-3xl font-extrabold uppercase tracking-[0.12em] text-white">
-              {movie?.title ?? "Untitled"}
-            </div>
-            {movie?.year && (
-              <div className="mt-2 text-sm tracking-[0.2em] text-white/50">
-                {movie.year}
+      <div
+          className={[
+            "cursor-pointer group relative h-90 w-full overflow-hidden rounded-[22px] border bg-white/5",
+            "border-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]",
+          ].join(" ")}
+          style={
+            hoverAccent
+                ? {
+                  borderColor: "rgba(255,255,255,0.10)",
+                }
+                : undefined
+          }
+      >
+        {showPoster ? (
+            <img
+                src={movie!.posterUrl}
+                alt={movie?.title ?? "Movie poster"}
+                className="absolute inset-0 h-full w-full object-cover"
+                onError={() => setImgFailed(true)}
+            />
+        ) : (
+            <div className="absolute inset-0 bg-black">
+              <div
+                  className="absolute inset-x-0 top-0 h-1"
+                  style={{ backgroundColor: accent }}
+              />
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.08),transparent_35%)]" />
+              <div className="flex h-full w-full flex-col items-center justify-center px-6 text-center">
+                <div className="text-3xl font-extrabold uppercase tracking-[0.12em] text-white">
+                  {movie?.title ?? "Untitled"}
+                </div>
+                {movie?.year && (
+                    <div className="mt-2 text-sm tracking-[0.2em] text-white/50">
+                      {movie.year}
+                    </div>
+                )}
               </div>
+            </div>
+        )}
+
+        <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent" />
+
+        {hoverAccent && (
+            <div
+                className="pointer-events-none absolute inset-0 rounded-[22px] opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+                style={{
+                  boxShadow: `0 0 0 1px ${hexToRgba(accent, 0.9)}, 0 25px 60px rgba(0,0,0,0.55)`,
+                  border: `1px solid ${hexToRgba(accent, 0.9)}`,
+                }}
+            />
+        )}
+
+        <div className="absolute inset-x-0 bottom-0 p-4">
+          {showPoster && (
+              <>
+                <div className="text-lg font-semibold text-white">
+                  {movie?.title ?? "No title"}
+                </div>
+
+                {movie?.year && (
+                    <div className="mt-1 text-sm text-white/70">{movie.year}</div>
+                )}
+              </>
+          )}
+
+          {movie?.summary && (
+              <p className={`${showPoster ? "mt-2" : ""} line-clamp-3 text-sm text-white/75`}>
+                {movie.summary}
+              </p>
+          )}
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            {movie?.sentimentLabel && (
+                <span className="rounded-full bg-white/10 px-2.5 py-1 text-xs text-white/85">
+              {movie.sentimentLabel}
+            </span>
+            )}
+            {movie?.engagementLabel && (
+                <span className="rounded-full bg-white/10 px-2.5 py-1 text-xs text-white/85">
+              {movie.engagementLabel}
+            </span>
             )}
           </div>
         </div>
-      )}
-
-      <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent" />
-
-      {hoverAccent && (
-        <div
-          className="pointer-events-none absolute inset-0 rounded-[22px] opacity-0 transition-opacity duration-200 group-hover:opacity-100"
-          style={{
-            boxShadow: `0 0 0 1px ${hexToRgba(accent, 0.9)}, 0 25px 60px rgba(0,0,0,0.55)`,
-            border: `1px solid ${hexToRgba(accent, 0.9)}`,
-          }}
-        />
-      )}
-
-      <div className="absolute inset-x-0 bottom-0 p-4">
-        {showPoster && (
-          <>
-            <div className="text-lg font-semibold text-white">
-              {movie?.title ?? "No title"}
-            </div>
-            {movie?.year && (
-              <div className="mt-1 text-sm text-white/70">{movie.year}</div>
-            )}
-          </>
-        )}
-
-        {movie?.summary && (
-          <p className={`${showPoster ? "mt-2" : ""} line-clamp-3 text-sm text-white/75`}>
-            {movie.summary}
-          </p>
-        )}
-
-        <div className="mt-3 flex flex-wrap gap-2">
-          {movie?.sentimentLabel && (
-            <span className="rounded-full bg-white/10 px-2.5 py-1 text-xs text-white/85">
-              {movie.sentimentLabel}
-            </span>
-          )}
-          {movie?.engagementLabel && (
-            <span className="rounded-full bg-white/10 px-2.5 py-1 text-xs text-white/85">
-              {movie.engagementLabel}
-            </span>
-          )}
-        </div>
       </div>
-    </div>
   );
 }
 
-/* ── Helpers ── */
+/* helpers */
 function hexToRgba(hex: string, alpha: number) {
   const h = hex.replace("#", "").trim();
   const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
@@ -485,6 +457,7 @@ function hexToRgba(hex: string, alpha: number) {
 }
 
 function formatCompact(n: number) {
+ 
   const abs = Math.abs(n);
   if (abs >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`;
   if (abs >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
