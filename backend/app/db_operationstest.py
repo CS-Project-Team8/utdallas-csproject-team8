@@ -3,8 +3,7 @@ import psycopg2
 import psycopg2.extras
 import os
 from dotenv import load_dotenv
-
-load_dotenv(dotenv_path=Path(__file__).parent.parent.parent / ".env")
+load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
 
 conn = psycopg2.connect(os.getenv("DATABASE_URL"))
 

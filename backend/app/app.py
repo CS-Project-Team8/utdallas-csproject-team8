@@ -324,7 +324,11 @@ def run_llm_for_movie(run_id, movie_id):
   
 # main   
 if __name__ == "__main__":    
-    MOVIE_ID = get_movie_id_from_title("Guardians of the Galaxy Vol. 3")
+  movie_list = ["Weapons"]  
+  for title in movie_list:
+    print(f"\n\n=== Running LLM pipeline for '{title}' ===")
+  
+    MOVIE_ID = get_movie_id_from_title(title)
     STUDIO_ID = get_studio_id_from_movie_id(MOVIE_ID)
     
     conn = get_conn()
@@ -335,4 +339,3 @@ if __name__ == "__main__":
     result = run_llm_for_movie(RUN_ID, MOVIE_ID)
     print("Final aggregated analysis:")
     print(json.dumps(result, indent=2))
-    
