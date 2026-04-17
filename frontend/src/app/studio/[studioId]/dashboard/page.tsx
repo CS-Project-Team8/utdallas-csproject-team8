@@ -331,13 +331,6 @@ export default function StudioDashboard() {
 
                 {/* Center: search (hidden on mobile) */}
                 <div className="hidden w-full max-w-2xl items-center gap-3 md:flex">
-                  <button
-                      className="rounded-xl border border-white/10 bg-white/5 p-2.5 text-white/70 hover:text-white"
-                      aria-label="Menu"
-                  >
-                    <Menu className="h-5 w-5" />
-                  </button>
-
                   <div className="relative w-full">
                     <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" />
                     <input

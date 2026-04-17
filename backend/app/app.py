@@ -237,9 +237,9 @@ def _build_video_input(transcript, comments):
 # defining llm model and message so don't have to repeat
 def _call_llm(system_prompt, user_content):
     response = client.chat.completions.create(
-        model = "llama-3.3-70b-versatile", # using this for production
+        # model = "llama-3.3-70b-versatile", # using this for production
         # model = "llama-3.1-8b-instant",  # using this for testing
-        # model = "meta-llama/llama-4-scout-17b-16e-instruct",  
+        model = "meta-llama/llama-4-scout-17b-16e-instruct",  
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user",   "content": user_content},
