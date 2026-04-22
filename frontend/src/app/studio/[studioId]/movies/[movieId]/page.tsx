@@ -131,7 +131,11 @@ export default function MovieDetailPage() {
                   <h1 className="text-4xl font-semibold tracking-tight">
                     {movie.title}
                   </h1>
+
+                  {/* 
                   <p className="mt-2 text-white/60">Movie ID: {movie.movieid}</p>
+                  */}
+
                 </div>
 
                 <div className="flex flex-wrap gap-3">
@@ -184,6 +188,7 @@ export default function MovieDetailPage() {
                     <span className="text-white font-medium">Title:</span> {movie.title}
                   </div>
 
+                  {/*
                   <div className="rounded-2xl bg-white/5 p-4">
                     <span className="text-white font-medium">Movie ID:</span> {movie.movieid}
                   </div>
@@ -191,6 +196,7 @@ export default function MovieDetailPage() {
                   <div className="rounded-2xl bg-white/5 p-4">
                     <span className="text-white font-medium">Studio ID:</span> {movie.studioid}
                   </div>
+                  */}
 
                   <div className="rounded-2xl bg-white/5 p-4 flex items-center gap-2">
                     <Star className="h-4 w-4 text-white" />

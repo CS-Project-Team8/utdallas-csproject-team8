@@ -151,6 +151,7 @@ export default function StudioDashboard() {
   const [loadingSearch, setLoadingSearch] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [pipelineRunning, setPipelineRunning] = useState(false);
 
   useEffect(() => {
     const loadDashboard = async () => {
@@ -309,7 +310,7 @@ export default function StudioDashboard() {
             />
 
             <div className="relative flex h-full flex-col">
-              <header className="flex flex-shrink-0 items-center justify-between gap-4 px-6 py-5">
+              <header className="relative flex flex-shrink-0 items-center justify-between gap-4 px-6 py-5">
                 {/* Left: studio logo */}
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-3">
@@ -329,8 +330,7 @@ export default function StudioDashboard() {
                   </div>
                 </div>
 
-                {/* Center: search (hidden on mobile) */}
-                <div className="hidden w-full max-w-2xl items-center gap-3 md:flex">
+                <div className="hidden w-full max-w-2xl items-center gap-3 md:flex absolute left-1/2 -translate-x-1/2">
                   <div className="relative w-full">
                     <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" />
                     <input
@@ -342,29 +342,76 @@ export default function StudioDashboard() {
                   </div>
                 </div>
 
-                {/* Right: bell + logout + avatar — flex-shrink-0 is the key here */}
-                  <div className="flex items-center gap-3 flex-shrink-0 ml-auto">
-                    <button
-                      className="rounded-xl border border-white/10 bg-white/5 p-2.5 text-white/70 hover:text-white"
-                      aria-label="Notifications"
-                    >
-                      <Bell className="h-5 w-5" />
-                    </button>
+                <button
+                  // replace the existing button onClick with this:
+                  onClick={async () => {
+                    setPipelineRunning(true);
+                    try {
+                      await fetch(`${apiBaseUrl}/api/v1/studios/${studioId}/run-pipeline`, {
+                        method: "POST",
+                      });
 
-                    {/* ── LOGOUT BUTTON ── */}
-                    <button
-                      onClick={handleLogout}
-                      className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-white/70 hover:text-red-400 hover:bg-red-500/10 transition-all"
-                      aria-label="Log out"
-                    >
-                      <LogOut className="h-5 w-5" />
-                      <span className="text-xs font-medium">Logout</span> 
-                    </button>
+                      // Poll every 5 seconds until pipeline is done
+                      const poll = setInterval(async () => {
+                        try {
+                          const res = await fetch(`${apiBaseUrl}/api/v1/studios/${studioId}/pipeline-status`);
+                          const { status } = await res.json();
+                          if (status === "idle") {
+                            clearInterval(poll);
+                            window.location.reload();
+                          }
+                        } catch {
+                          clearInterval(poll);
+                          setPipelineRunning(false);
+                        }
+                      }, 5000);
+                    } catch (err) {
+                      console.error("Pipeline failed:", err);
+                      setPipelineRunning(false);
+                    }
+                  }}
+                  disabled={pipelineRunning}
+                  className="flex-shrink-0 flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/70 hover:text-white hover:bg-white/10 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {pipelineRunning ? (
+                    <>
+                      <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                      </svg>
+                      Running...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polygon points="5,3 19,12 5,21"/>
+                      </svg>
+                      Run Pipeline
+                    </>
+                  )}
+                </button>
 
-                    <div className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/5 text-sm font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
-                      {studio.initials}
-                    </div>
+                <div className="flex items-center gap-3 flex-shrink-0 ml-auto">
+                  <button
+                    className="rounded-xl border border-white/10 bg-white/5 p-2.5 text-white/70 hover:text-white"
+                    aria-label="Notifications"
+                  >
+                    <Bell className="h-5 w-5" />
+                  </button>
+
+                  <button
+                    onClick={handleLogout}
+                    className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-white/70 hover:text-red-400 hover:bg-red-500/10 transition-all"
+                    aria-label="Log out"
+                  >
+                    <LogOut className="h-5 w-5" />
+                    <span className="text-xs font-medium">Logout</span> 
+                  </button>
+
+                  <div className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/5 text-sm font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+                    {studio.initials}
                   </div>
+                </div>
               </header>
 
               <div className="px-6">

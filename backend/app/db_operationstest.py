@@ -104,3 +104,10 @@ def insert_movie_poster(cursor, movie_id, poster_url):
         SET posterurl = %s, updatedat = now()
         WHERE movieid = %s
     """, (poster_url, movie_id))
+    
+def insert_movie_rating(cursor, movie_id, rating):
+    cursor.execute("""
+        UPDATE movies
+        SET rating = %s, updatedat = now()
+        WHERE movieid = %s
+    """, (rating, movie_id))

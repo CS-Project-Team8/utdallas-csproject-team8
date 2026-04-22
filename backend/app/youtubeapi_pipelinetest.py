@@ -18,7 +18,7 @@ import math
 import requests
 
 # imports for DB operations
-from db_operationstest import (
+from app.db_operationstest import (
     conn,
     insert_yt_channel,
     insert_yt_video,
@@ -28,7 +28,8 @@ from db_operationstest import (
     insert_movie,
     insert_movie_metric_snapshot,
     insert_transcript,
-    insert_movie_poster
+    insert_movie_poster,
+    insert_movie_rating
 )
 
 # imports for environment variables
@@ -359,7 +360,7 @@ def get_uploads_playlist_id(channel_id):
         raise RuntimeError(f"Channel not found: {channel_id}")
     return items[0]["contentDetails"]["relatedPlaylists"]["uploads"]
 
-def get_latest_trailers_from_channel(channel_id, limit=5, max_scan=200):
+def get_latest_trailers_from_channel(channel_id, limit=6, max_scan=200):
     print(f"  Searching for trailers on channel {channel_id}...")
 
     # Define a recency threshold (e.g., videos published in the last 12 months)
@@ -839,6 +840,41 @@ def phase3_insert_posters(movie_id, movie_name):
     except Exception as e:
         conn.rollback()
         print(f"  Error fetching/saving poster: {e}")
+        
+# PHASE 4: for each movie, find the movie rating using TMDB API call
+
+def phase4_insert_ratings(movie_id, movie_name):
+    print(f"\n{'='*60}")
+    print(f"PHASE 4: Finding rating for {movie_name}")
+    print(f"{'='*60}")
+
+    try:
+        response = requests.get(
+            "https://api.themoviedb.org/3/search/movie",
+            params={
+                "api_key": TMDB_API_KEY,
+                "query": movie_name
+            }
+        ).json()
+
+        results = response.get("results", [])
+        if not results:
+            print(f"  No TMDB entry found for {movie_name}")
+            return
+
+        rating = results[0].get("vote_average")
+        if rating is None:
+            print(f"  No rating found on TMDB for {movie_name}")
+            return
+
+        with conn.cursor() as cur:
+            insert_movie_rating(cur, movie_id, rating)
+        conn.commit()
+        print(f"  Saved rating {rating} for {movie_name}")
+
+    except Exception as e:
+        conn.rollback()
+        print(f"  Error fetching/saving rating: {e}")
 
 # RUNNING PIPELINE
 
@@ -862,7 +898,7 @@ def run_pipeline(studio):
 
         # Get latest 5 released trailers from channel uploads (quota-efficient)
         print("\n  Fetching latest trailers from channel uploads...")
-        trailers = get_latest_trailers_from_channel(official_channel_id, limit=5)
+        trailers = get_latest_trailers_from_channel(official_channel_id, limit=6)
         if not trailers:
             print(f"Skipping {studio_name} — no released trailers found on channel")
             return
@@ -883,6 +919,11 @@ def run_pipeline(studio):
         for movie_id, movie_name in movie_ids:
             phase3_insert_posters(movie_id, movie_name)
             time.sleep(2)
+            
+         # Phase 4: for each movie, find the rating using TMDB API call
+        for movie_id, movie_name in movie_ids:
+            phase4_insert_ratings(movie_id, movie_name)
+            time.sleep(2)
 
     except RuntimeError as e:
         print(f"\n  STOPPED: {e}")
@@ -891,6 +932,26 @@ def run_pipeline(studio):
     print(f"Pipeline complete. Total YouTube quota used: {quota_used} units")
     print(f"{'='*60}")
 
+def update_all_ratings():
+    with conn.cursor() as cur:
+        cur.execute("SELECT movieid, title FROM movies")
+        movies = cur.fetchall()
+
+    print(f"Found {len(movies)} movies to update")
+
+    for movie_id, movie_name in movies:
+        phase4_insert_ratings(movie_id, movie_name)
+        
+def run_pipeline_for_studio(studio_id: str):
+    with conn.cursor() as cur:
+        cur.execute("SELECT name FROM studios WHERE studioid = %s", (studio_id,))
+        row = cur.fetchone()
+    
+    if not row:
+        raise ValueError(f"Studio not found: {studio_id}")
+    
+    studio = {"id": studio_id, "name": row[0]}
+    run_pipeline(studio)
 
 # MAIN: 
 # main function to run the pipeline and test the transcription function with a sample YouTube video URL
@@ -903,3 +964,4 @@ if __name__ == "__main__":
     studio = {"name": "Warner Bros. Pictures", "id": "c9e36e96-5295-4724-8825-9a2db92636e9"} # -> shreyas admin
     
     run_pipeline(studio)
+    
