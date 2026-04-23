@@ -5,8 +5,8 @@ import os
 from dotenv import load_dotenv
 load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
 
-conn = psycopg2.connect(os.getenv("DATABASE_URL"))
-
+def get_conn():
+    return psycopg2.connect(os.getenv("DATABASE_URL"))
 
 def insert_yt_channel(cursor, channelid, channeltitle, country):
     cursor.execute("""
