@@ -72,6 +72,46 @@ async def admin_login_check(
         "studioId": verified_studio_id,
         "role": membership_data.get("role"),
     }
+    
+@router.post("/super-admin-login-check")
+async def super_admin_login_check(
+    current_user=Depends(get_current_user),
+    postgres_db: Session = Depends(get_db),
+):
+    uid = current_user["uid"]
+
+    memberships = (
+        db.collection("studio_memberships")
+        .where("firebaseUid", "==", uid)
+        .where("superAdmin", "==", "yes")
+        .where("status", "==", "active")
+        .limit(1)
+        .stream()
+    )
+
+    membership_docs = list(memberships)
+
+    if not membership_docs:
+        raise HTTPException(status_code=403, detail="You are not authorized as admin.")
+
+    membership_data = membership_docs[0].to_dict()
+    postgres_studio_id = membership_data.get("postgresStudioId")
+
+    if not postgres_studio_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Membership is missing postgresStudioId.",
+        )
+
+    verified_studio_id = verify_postgres_studio_exists(postgres_studio_id, postgres_db)
+
+    return {
+        "ok": True,
+        "uid": uid,
+        "email": current_user.get("email"),
+        "studioId": verified_studio_id,
+        "role": membership_data.get("role"),
+    }
 
 @router.get("/studio-users")
 async def get_studio_users(
@@ -163,4 +203,86 @@ async def user_login_check(
         "email": current_user.get("email"),
         "studioId": verified_studio_id,
         "role": membership_data.get("role"),
+    }
+    
+@router.get("/all-studio-users")
+async def get_all_studio_users(
+    current_user=Depends(get_current_user),
+    postgres_db: Session = Depends(get_db),
+):
+    uid = current_user["uid"]
+
+    memberships = (
+        db.collection("studio_memberships")
+        .where("firebaseUid", "==", uid)
+        .where("superAdmin", "==", "yes")
+        .where("status", "==", "active")
+        .limit(1)
+        .stream()
+    )
+
+    membership_docs = list(memberships)
+
+    if not membership_docs:
+        raise HTTPException(status_code=403, detail="You are not authorized as admin.")
+
+    # optional: verify the current super admin has a real studio
+    membership_data = membership_docs[0].to_dict()
+    postgres_studio_id = membership_data.get("postgresStudioId")
+
+    if postgres_studio_id:
+        verify_postgres_studio_exists(postgres_studio_id, postgres_db)
+
+    users_query = (
+        db.collection("studio_memberships")
+        .where("status", "==", "active")
+        .stream()
+    )
+
+    raw_users = []
+    studio_ids = set()
+
+    for doc in users_query:
+        data = doc.to_dict()
+        user_studio_id = data.get("postgresStudioId")
+
+        if user_studio_id:
+            studio_ids.add(user_studio_id)
+
+        raw_users.append({
+            "id": doc.id,
+            "name": data.get("name", "No name"),
+            "email": data.get("email", "No email"),
+            "role": data.get("role", "user"),
+            "status": data.get("status", "active"),
+            "studioId": user_studio_id,
+        })
+
+    studio_name_map = {}
+
+    if studio_ids:
+        result = postgres_db.execute(
+            text(
+                """
+                SELECT studioid, name
+                FROM studios
+                WHERE studioid IN :studio_ids
+                """
+            ),
+            {"studio_ids": tuple(studio_ids)},
+        )
+
+        for row in result:
+            studio_name_map[str(row.studioid)] = row.name
+
+    users = []
+    for user in raw_users:
+        users.append({
+            **user,
+            "studioName": studio_name_map.get(user["studioId"], "Unknown Studio"),
+        })
+
+    return {
+        "ok": True,
+        "users": users,
     }
