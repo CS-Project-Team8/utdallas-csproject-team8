@@ -291,6 +291,7 @@ export default function StudioDashboard() {
     }
   };
 
+
   return (
       <div className="h-screen w-screen bg-[#0B0B0B] text-white">
         <div className="h-full">

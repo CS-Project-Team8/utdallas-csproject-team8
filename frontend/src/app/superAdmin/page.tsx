@@ -33,7 +33,7 @@ export default function AdminLoginPage() {
       const baseUrl = (process.env.NEXT_PUBLIC_BACKEND_URL ?? "").replace(/\/+$/, "");
 
       const res = await fetch(
-          `${baseUrl}/auth/admin-login-check`,
+          `${baseUrl}/auth/super-admin-login-check`,
           {
             method: "POST",
             headers: {
@@ -58,7 +58,7 @@ export default function AdminLoginPage() {
         return;
       }
 
-      router.push("./admin/sendInvite");
+      router.push("./superAdmin/universalList");
     } catch (err: any) {
       console.error(err);
       switch (err.code) {
@@ -89,7 +89,7 @@ export default function AdminLoginPage() {
 
         <div className="relative z-10 w-full max-w-md p-10 rounded-2xl bg-white/5 backdrop-blur-xl border border-white/10 shadow-2xl">
           <h1 className="text-3xl font-semibold text-white text-center mb-8 tracking-wide">
-            Admin Login
+            Super Admin Login
           </h1>
 
           <form className="space-y-5" onSubmit={handleLogin}>

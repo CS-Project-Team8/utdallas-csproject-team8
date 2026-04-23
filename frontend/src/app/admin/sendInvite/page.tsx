@@ -1,13 +1,14 @@
 "use client";
-
 import React, { useMemo, useState } from "react";
 import { Mail, Shield, User2, Send, ChevronDown } from "lucide-react";
 import { getFirebaseAuth } from "@/lib/firebase";
+import { useRouter } from "next/navigation";
 
 type Role = "admin" | "user" | "viewer";
 
 export default function SendInvitePage() {
   const [email, setEmail] = useState("");
+  const router = useRouter();
   const [role, setRole] = useState<Role>("user");
   const [status, setStatus] = useState<"idle" | "sent" | "error">("idle");
   const [message, setMessage] = useState("");
@@ -85,15 +86,25 @@ export default function SendInvitePage() {
   }
 
   return (
-    <div className="min-h-screen bg-black relative overflow-hidden flex items-center justify-center p-6">
+    <div className=" min-h-screen bg-black relative overflow-hidden flex items-center justify-center p-6">
+      
       <div className="absolute w-[700px] h-[700px] bg-red-600/20 blur-[180px] rounded-full -top-56 -left-56" />
       <div className="absolute w-[520px] h-[520px] bg-red-500/10 blur-[160px] rounded-full bottom-[-220px] right-[-220px]" />
       <div className="absolute w-[420px] h-[420px] bg-red-700/10 blur-[160px] rounded-full top-[35%] right-[-200px]" />
-
+      <div className="absolute top-6 right-6 z-20">
+        <button
+          onClick={() => router.push("./userList")}
+          className="cursor-pointer rounded-xl border border-white/15 bg-white/10 backdrop-blur-md text-white px-5 py-2 text-sm font-medium hover:bg-white/20 transition"
+        >
+          User List
+        </button>
+      </div>
       <div className="relative z-10 w-full max-w-lg rounded-3xl p-8 bg-gradient-to-b from-white/14 to-white/6 backdrop-blur-3xl border border-white/18 shadow-[0_20px_70px_rgba(0,0,0,0.65)] overflow-hidden">
+        
         <div className="pointer-events-none absolute -top-24 left-0 right-0 h-40 bg-gradient-to-b from-white/30 to-transparent blur-2xl" />
-
+          
         <div className="flex items-start justify-between gap-4">
+          
           <div>
             <h1 className="text-2xl font-semibold text-white tracking-tight">
               Invite a teammate
