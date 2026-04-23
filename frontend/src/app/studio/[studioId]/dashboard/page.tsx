@@ -494,7 +494,7 @@ function MoviePlaceholderCard({
   return (
       <div
           className={[
-            "group relative block h-full min-h-[420px] w-full min-w-0 overflow-hidden rounded-[22px] border bg-white/5",
+            "group relative block h-full min-h-[450px] w-full min-w-0 overflow-hidden rounded-[22px] border bg-white/5",
             "border-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]",
           ].join(" ")}
           style={
