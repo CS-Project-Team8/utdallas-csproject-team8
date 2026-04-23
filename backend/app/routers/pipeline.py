@@ -4,7 +4,6 @@ from app.app import run_llm_for_studio
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from app.db_routes import get_conn
-from app.db_operationstest import insert_movie_rating
 
 router = APIRouter()
 

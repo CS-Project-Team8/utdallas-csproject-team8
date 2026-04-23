@@ -3,7 +3,7 @@ import json
 import re
 from groq import Groq
 
-from app.db_routes import get_conn, load_llm_output, get_movie_data_for_llm, get_movie_id_from_title, get_studio_id_from_movie_id, insert_insight_run, update_studio_top_movies
+from app.db_routes import get_conn, load_llm_output, get_movie_data_for_llm, get_studio_id_from_movie_id, insert_insight_run, update_studio_top_movies
 
 from dotenv import load_dotenv
 from pathlib import Path
