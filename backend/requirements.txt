@@ -50,5 +50,6 @@ pytest==8.3.3
 ruff==0.6.9
 SQLAlchemy==2.0.43
 asyncpg==0.30.0
-psycopg2-binary==2.9.11google-api-python-client==2.194.0
+psycopg2-binary==2.9.11
+google-api-python-client==2.194.0
 groq==1.2.0
