@@ -446,7 +446,7 @@ export default function StudioDashboard() {
                       return (
                           <div
                               key={resolvedMovieId}
-                              className="w-full md:w-[calc(50%-0.75rem)] xl:w-[calc(25%-1.125rem)]"
+                              className="w-full md:w-[calc(50%-0.75rem)] xl:w-[calc(33.33%-1.125rem)]" //xl:w-[calc(25%-1.125rem)]"
                           >
                             <Link
                                 href={`/studio/${studioId}/movies/${resolvedMovieId}`}
