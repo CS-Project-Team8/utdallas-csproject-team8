@@ -11,7 +11,8 @@ load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
 
 GROQ_LLM_API_KEY = os.getenv("GROQ_LLM_API_KEY")
 
-client = Groq(api_key=GROQ_LLM_API_KEY)
+def get_groq_client():
+    return Groq(api_key=GROQ_LLM_API_KEY)
 
 # different llm prompts for trailer vs reviews
 TRAILER_PROMPT = """
@@ -236,6 +237,7 @@ def _build_video_input(transcript, comments):
 
 # defining llm model and message so don't have to repeat
 def _call_llm(system_prompt, user_content):
+    client = get_groq_client()
     response = client.chat.completions.create(
         # model = "llama-3.3-70b-versatile", # using this for production
         # model = "llama-3.1-8b-instant",  # using this for testing
