@@ -34,15 +34,19 @@ from pathlib import Path
 from dotenv import load_dotenv
 load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
 
-# keys and client setup
+# keys (loaded from env, not used at import time)
 DEVELOPER_KEY1 = os.getenv("YOUTUBE_API_KEY_1")
 DEVELOPER_KEY2 = os.getenv("YOUTUBE_API_KEY_2")
 DEVELOPER_KEY3 = os.getenv("YOUTUBE_API_KEY_3")
 GROQ_TRANSCRIPT_API_KEY = os.getenv("GROQ_TRANSCRIPT_API_KEY")
-TMDB_API_KEY    = os.getenv("TMDB_API_KEY")
+TMDB_API_KEY = os.getenv("TMDB_API_KEY")
 
-youtube_object = build("youtube", "v3", developerKey=DEVELOPER_KEY2)
-client = Groq(api_key=GROQ_TRANSCRIPT_API_KEY)
+# clients are created on demand, not at import time
+def get_youtube_client():
+    return build("youtube", "v3", developerKey=DEVELOPER_KEY2)
+
+def get_groq_client():
+    return Groq(api_key=GROQ_TRANSCRIPT_API_KEY)
 
 TRAILER_KEYWORDS = ["official trailer", "trailer", "official teaser", "teaser"]
 QUOTA_LIMIT = 9000  # hard stop before hitting YouTube's 10,000 daily limit
@@ -178,6 +182,7 @@ def transcribe_with_groq_whisper(video_url):
         tmp_path = trim_audio_if_needed(tmp_path)
         file_mb = os.path.getsize(tmp_path) / (1024 * 1024)
         print(f"  Sending {file_mb:.1f}MB to Whisper...")
+        client = get_groq_client()
         with open(tmp_path, "rb") as audio_file:
             result = client.audio.transcriptions.create(
                 model="whisper-large-v3",
@@ -223,8 +228,9 @@ def _parse_retry_wait(error_str):
 # YOUTUBE API DATA FUNCTIONS:
 
 def get_video_statistics(video_id):
+    youtube = get_youtube_client()
     try:
-        result = youtube_object.videos().list(
+        result = youtube.videos().list(
             part="snippet,statistics,contentDetails", id=video_id
         ).execute()
         use_quota(1, f"videos.list ({video_id})")
@@ -251,8 +257,9 @@ def get_video_statistics(video_id):
         return None
 
 def get_video_comments(video_id, order="relevance", max_results=100):
+    youtube = get_youtube_client()
     try:
-        result = youtube_object.commentThreads().list(
+        result = youtube.commentThreads().list(
             part="snippet", videoId=video_id, order=order,
             maxResults=max_results, textFormat="plainText"
         ).execute()
@@ -277,7 +284,8 @@ def get_video_comments(video_id, order="relevance", max_results=100):
         return []
 
 def get_uploads_playlist_id(channel_id):
-    result = youtube_object.channels().list(part="contentDetails", id=channel_id).execute()
+    youtube = get_youtube_client()
+    result = youtube.channels().list(part="contentDetails", id=channel_id).execute()
     use_quota(1, "channels.list (uploads playlist)")
     items = result.get("items", [])
     if not items:
@@ -285,12 +293,13 @@ def get_uploads_playlist_id(channel_id):
     return items[0]["contentDetails"]["relatedPlaylists"]["uploads"]
 
 def get_latest_trailers_from_channel(channel_id, limit=6, max_scan=200):
+    youtube = get_youtube_client()
     print(f"  Searching for trailers on channel {channel_id}...")
     one_year_ago = (datetime.now() - timedelta(days=365)).isoformat() + "Z"
     candidate_ids = []
     seen = set()
     for order in ["date", "relevance"]:
-        result = youtube_object.search().list(
+        result = youtube.search().list(
             q="official trailer", part="id,snippet", type="video",
             channelId=channel_id, maxResults=25, order=order, publishedAfter=one_year_ago
         ).execute()
@@ -303,7 +312,7 @@ def get_latest_trailers_from_channel(channel_id, limit=6, max_scan=200):
     if not candidate_ids:
         print("  No trailer candidates found")
         return []
-    result = youtube_object.videos().list(
+    result = youtube.videos().list(
         part="snippet,statistics,contentDetails", id=",".join(candidate_ids)
     ).execute()
     use_quota(1, "videos.list (trailer candidates)")
@@ -353,11 +362,12 @@ def get_latest_trailers_from_channel(channel_id, limit=6, max_scan=200):
 # PHASE 0: Find official YouTube channel for each studio and insert into DB
 
 def phase0_insert_studio_channels(studio_id, studio_name):
+    youtube = get_youtube_client()
     print(f"\n{'='*60}")
     print(f"PHASE 0: Finding official channel for {studio_name}")
     print(f"{'='*60}")
 
-    search = youtube_object.search().list(
+    search = youtube.search().list(
         q=studio_name, part="id, snippet", type="channel", maxResults=1
     ).execute()
     use_quota(100, f"search.list (channel: {studio_name})")
@@ -371,7 +381,7 @@ def phase0_insert_studio_channels(studio_id, studio_name):
     channel_id = item["id"]["channelId"]
     channel_title = item["snippet"]["channelTitle"]
 
-    channel_details = youtube_object.channels().list(part="snippet", id=channel_id).execute()
+    channel_details = youtube.channels().list(part="snippet", id=channel_id).execute()
     use_quota(1, "channels.list (country)")
 
     country = None
@@ -508,6 +518,7 @@ def phase1_insert_movies(studio_id, studio_name, trailers):
 # PHASE 2: for each movie, find and insert top review videos + comments
 
 def phase2_insert_reviews(movie_id, movie_name, studio_channel_id):
+    youtube = get_youtube_client()
     print(f"\n{'='*60}")
     print(f"PHASE 2: Finding reviews for {movie_name}")
     print(f"{'='*60}")
@@ -517,7 +528,7 @@ def phase2_insert_reviews(movie_id, movie_name, studio_channel_id):
     seen = set()
     for template in REVIEW_QUERY_TEMPLATES:
         query = template.format(title=f"'{movie_name}'")
-        result = youtube_object.search().list(
+        result = youtube.search().list(
             q=query, part="id,snippet", type="video", maxResults=10
         ).execute()
         use_quota(100, f"search.list (reviews: {query})")
@@ -535,7 +546,7 @@ def phase2_insert_reviews(movie_id, movie_name, studio_channel_id):
     all_records = []
     for i in range(0, len(candidate_ids), 50):
         batch = candidate_ids[i:i + 50]
-        result = youtube_object.videos().list(
+        result = youtube.videos().list(
             part="snippet,statistics,contentDetails", id=",".join(batch)
         ).execute()
         use_quota(1, f"videos.list (review candidates batch {i//50 + 1})")
@@ -818,12 +829,12 @@ def run_pipeline(studio):
             phase2_insert_reviews(movie_id, movie_name, official_channel_id)
             time.sleep(2)
 
-        # Phase 3: for each movie, find the poster using TMDB API call
+        # Phase 3: for each movie, find the poster
         for movie_id, movie_name in movie_ids:
             phase3_insert_posters(movie_id, movie_name)
             time.sleep(2)
 
-        # Phase 4: for each movie, find the rating using TMDB API call
+        # Phase 4: for each movie, find the rating
         for movie_id, movie_name in movie_ids:
             phase4_insert_ratings(movie_id, movie_name)
             time.sleep(2)
