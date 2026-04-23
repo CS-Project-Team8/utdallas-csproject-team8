@@ -73,6 +73,58 @@ async def admin_login_check(
         "role": membership_data.get("role"),
     }
 
+@router.get("/studio-users")
+async def get_studio_users(
+    current_user=Depends(get_current_user),
+    postgres_db: Session = Depends(get_db),
+):
+    uid = current_user["uid"]
+
+    memberships = (
+        db.collection("studio_memberships")
+        .where("firebaseUid", "==", uid)
+        .where("role", "==", "admin")
+        .where("status", "==", "active")
+        .limit(1)
+        .stream()
+    )
+
+    membership_docs = list(memberships)
+
+    if not membership_docs:
+        raise HTTPException(status_code=403, detail="You are not authorized as admin.")
+
+    membership_data = membership_docs[0].to_dict()
+    postgres_studio_id = membership_data.get("postgresStudioId")
+
+    if not postgres_studio_id:
+        raise HTTPException(status_code=400, detail="Membership is missing postgresStudioId.")
+
+    verified_studio_id = verify_postgres_studio_exists(postgres_studio_id, postgres_db)
+
+    users_query = (
+        db.collection("studio_memberships")
+        .where("postgresStudioId", "==", verified_studio_id)
+        .where("status", "==", "active")
+        .stream()
+    )
+
+    users = []
+    for doc in users_query:
+        data = doc.to_dict()
+        users.append({
+            "id": doc.id,
+            "name": data.get("name", "No name"),
+            "email": data.get("email", "No email"),
+            "role": data.get("role", "user"),
+            "status": data.get("status", "active"),
+        })
+
+    return {
+        "ok": True,
+        "studioId": verified_studio_id,
+        "users": users,
+    }
 
 @router.post("/user-login-check")
 async def user_login_check(
