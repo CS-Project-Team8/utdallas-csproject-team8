@@ -5,8 +5,8 @@ import os
 from dotenv import load_dotenv
 load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
 
-conn = psycopg2.connect(os.getenv("DATABASE_URL"))
-
+def get_conn():
+    return psycopg2.connect(os.getenv("DATABASE_URL"))
 
 def insert_yt_channel(cursor, channelid, channeltitle, country):
     cursor.execute("""
@@ -104,3 +104,10 @@ def insert_movie_poster(cursor, movie_id, poster_url):
         SET posterurl = %s, updatedat = now()
         WHERE movieid = %s
     """, (poster_url, movie_id))
+    
+def insert_movie_rating(cursor, movie_id, rating):
+    cursor.execute("""
+        UPDATE movies
+        SET rating = %s, updatedat = now()
+        WHERE movieid = %s
+    """, (rating, movie_id))

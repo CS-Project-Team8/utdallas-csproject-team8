@@ -3,7 +3,7 @@ import json
 import re
 from groq import Groq
 
-from db_routes import get_conn, load_llm_output, get_movie_data_for_llm, get_movie_id_from_title, get_studio_id_from_movie_id, insert_insight_run, update_studio_top_movies
+from app.db_routes import get_conn, load_llm_output, get_movie_data_for_llm, get_studio_id_from_movie_id, insert_insight_run, update_studio_top_movies
 
 from dotenv import load_dotenv
 from pathlib import Path
@@ -11,7 +11,8 @@ load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
 
 GROQ_LLM_API_KEY = os.getenv("GROQ_LLM_API_KEY")
 
-client = Groq(api_key=GROQ_LLM_API_KEY)
+def get_groq_client():
+    return Groq(api_key=GROQ_LLM_API_KEY)
 
 # different llm prompts for trailer vs reviews
 TRAILER_PROMPT = """
@@ -236,6 +237,7 @@ def _build_video_input(transcript, comments):
 
 # defining llm model and message so don't have to repeat
 def _call_llm(system_prompt, user_content):
+    client = get_groq_client()
     response = client.chat.completions.create(
         # model = "llama-3.3-70b-versatile", # using this for production
         # model = "llama-3.1-8b-instant",  # using this for testing
@@ -322,20 +324,49 @@ def run_llm_for_movie(run_id, movie_id):
     
     return result
   
+def run_llm_for_studio(studio_id: str):
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT movieid FROM movies WHERE studioid = %s", (studio_id,))
+            movie_ids = [row[0] for row in cur.fetchall()]
+    finally:
+        conn.close()
+
+    print(f"Running LLM for {len(movie_ids)} movies in studio {studio_id}")
+
+    for movie_id in movie_ids:
+        print(f"\n=== Running LLM for movie {movie_id} ===")
+        conn = get_conn()
+        run_id = insert_insight_run(conn.cursor(), studio_id)
+        conn.commit()
+        conn.close()
+
+        try:
+            run_llm_for_movie(run_id, movie_id)
+        except Exception as e:
+            print(f"  LLM failed for movie {movie_id}: {e}")
+  
 # main   
 if __name__ == "__main__":    
-  movie_list = ["Weapons"]  
-  for title in movie_list:
-    print(f"\n\n=== Running LLM pipeline for '{title}' ===")
+  # movie_list = ["Weapons"]  
+  # for title in movie_list:
+  #   print(f"\n\n=== Running LLM pipeline for '{title}' ===")
   
-    MOVIE_ID = get_movie_id_from_title(title)
-    STUDIO_ID = get_studio_id_from_movie_id(MOVIE_ID)
+  #   MOVIE_ID = get_movie_id_from_title(title)
+  #   STUDIO_ID = get_studio_id_from_movie_id(MOVIE_ID)
     
-    conn = get_conn()
-    RUN_ID = insert_insight_run(conn.cursor(), STUDIO_ID)
-    conn.commit()
-    conn.close()
+  #   conn = get_conn()
+  #   RUN_ID = insert_insight_run(conn.cursor(), STUDIO_ID)
+  #   conn.commit()
+  #   conn.close()
  
-    result = run_llm_for_movie(RUN_ID, MOVIE_ID)
-    print("Final aggregated analysis:")
-    print(json.dumps(result, indent=2))
+  #   result = run_llm_for_movie(RUN_ID, MOVIE_ID)
+  #   print("Final aggregated analysis:")
+  #   print(json.dumps(result, indent=2))
+    
+  conn = get_conn()
+  cursor = conn.cursor()
+  update_studio_top_movies(cursor, "11111111-1111-1111-1111-111111111111", method="auto_generated")
+  conn.commit()
+  conn.close()

@@ -114,7 +114,7 @@ def get_studio_dashboard(db, studio_id: str):
                       WHERE m.studioid = :studio_id
                         AND m.status = 'active'
                       ORDER BY m.releasedate DESC NULLS LAST, m.createdat DESC
-                          LIMIT 5
+                          LIMIT 6
                       """)
 
     studio = db.execute(studio_sql, {"studio_id": studio_id}).mappings().first()
@@ -200,7 +200,7 @@ def get_dashboard_movies(db, studio_id: str):
                       WHERE m.studioid = :studio_id
                         AND m.status = 'active'
                       ORDER BY m.releasedate DESC NULLS LAST, m.createdat DESC
-                          LIMIT 5
+                          LIMIT 6
                       """)
 
     rows = db.execute(movies_sql, {"studio_id": studio_id}).mappings().all()

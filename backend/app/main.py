@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.routers.auth import router as auth_router
 from app.routers.invite import router as invites_router
 from app.routers.movies import router as movies_router
+from app.routers.pipeline import router as pipeline_router  # ← ADD THIS
 
 
 app = FastAPI(title="YouTube Intelligence Platform API", version="0.1.0")
@@ -26,6 +27,7 @@ app.include_router(dashboard_router)
 app.include_router(auth_router)
 app.include_router(invites_router)
 app.include_router(movies_router)
+app.include_router(pipeline_router)  # ← ADD THIS
 
 
 @app.get("/health")
